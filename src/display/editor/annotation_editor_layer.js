@@ -497,10 +497,6 @@ class AnnotationEditorLayer {
     }
   }
 
-  /**
-   * Add a new editor in the current view.
-   * @param {AnnotationEditor} editor
-   */
   add(editor) {
     if (editor.parent === this && editor.isAttachedToDOM) {
       return;
@@ -514,12 +510,93 @@ class AnnotationEditorLayer {
       this.div.append(div);
       editor.isAttachedToDOM = true;
     }
-
-    // The editor will be correctly moved into the DOM (see fixAndSetPosition).
+    
     editor.fixAndSetPosition();
-    editor.onceAdded(/* focus = */ !this.#isEnabling);
+    editor.onceAdded(!this.#isEnabling);
     this.#uiManager.addToAnnotationStorage(editor);
     editor._reportTelemetry(editor.telemetryInitialData);
+
+    if (editor.annotationType === AnnotationEditorType.HIGHLIGHT ||
+      editor.annotationType === AnnotationEditorType.RECTANGLE
+    ) {
+      const pageNumber = this.pageIndex + 1;
+      let highlightedText = "";
+
+      if (editor.annotationType === AnnotationEditorType.HIGHLIGHT) {
+        try {
+          if (typeof editor.extractHighlightAnnotationText === 'function') {
+            if (editor.textDivs && editor.textDivs.length > 0) {
+              highlightedText = editor.textDivs.map(div => div.textContent).join(' ').trim();
+            } else {
+              const contentDiv = editor.contentDiv || editor.div;
+              if (contentDiv) {
+                highlightedText = contentDiv.textContent.trim();
+              } else {
+                highlightedText = "Text not found (from text highlight fallback)";
+              }
+            }
+          } else if (editor.textDivs) {
+            highlightedText = editor.textDivs.map(div => div.textContent).join(' ').trim();
+          } else {
+            const selection = window.getSelection();
+            highlightedText = selection ? selection.toString().trim() : "Text not found (from text highlight)";
+          }
+        } catch (e) {
+          console.error("Error extracting text for highlight:", e);
+          highlightedText = "Text extraction failed for text highlight";
+        }
+      } else if (editor.annotationType === AnnotationEditorType.RECTANGLE) {
+        highlightedText = "[Drawn Highlight]";
+      }
+      
+      let xPixel, yPixel, widthPixel, heightPixel;
+
+      if (editor.rect && editor.rect.length === 4) {
+        const [pdfX1, pdfY1, pdfX2, pdfY2] = editor.rect;
+        const [vx1, vy1] = this.viewport.convertToViewportPoint(pdfX1, pdfY2);
+        const [vx2, vy2] = this.viewport.convertToViewportPoint(pdfX2, pdfY1);
+
+        xPixel = Math.round(vx1);
+        yPixel = Math.round(vy1);
+        widthPixel = Math.round(vx2 - vx1);
+        heightPixel = Math.round(vy2 - vy1);
+
+        if (widthPixel < 0) {
+          xPixel += widthPixel;
+          widthPixel = Math.abs(widthPixel);
+        }
+        if (heightPixel < 0) {
+          yPixel += heightPixel;
+          heightPixel = Math.abs(heightPixel);
+        }
+
+      } else {
+        console.warn("editor.rect not found or invalid. Falling back to editor.div.offsetLeft/offsetTop.");
+        xPixel = editor.div.offsetLeft;
+        yPixel = editor.div.offsetTop;
+        widthPixel = editor.div.offsetWidth;
+        heightPixel = editor.div.offsetHeight;
+      }
+
+      console.log(xPixel, yPixel, widthPixel, heightPixel, widthPixel, heightPixel);
+      const messageData = {
+        type: 'PDFJS_ANNOTATION_ADDED',
+        detail: {
+          annotationType: editor.annotationType,
+          text: highlightedText,
+          page: pageNumber,
+          x: xPixel,
+          y: yPixel,
+          width: widthPixel,
+          height: heightPixel,
+          id: editor.id,
+        }
+      };
+
+      if (window.parent) {
+        window.parent.postMessage(messageData, '*');
+      }
+    }
   }
 
   moveEditorInDOM(editor) {
