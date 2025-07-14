@@ -805,5 +805,323 @@ See https://github.com/adobe-type-tools/cmap-resources
 
     </div> <!-- outerContainer -->
     <div id="printContainer"></div>
+    <script>
+
+      async function extractAndSendAnnotations() {
+        const pdfDoc = PDFViewerApplication?.pdfDocument;
+        if (!pdfDoc) return;
+
+        const allComments = [];
+
+        for (let pageNum = 1; pageNum <= pdfDoc.numPages; pageNum++) {
+          const page = await pdfDoc.getPage(pageNum);
+          const annotations = await page.getAnnotations();
+
+          annotations.forEach(annot => {
+            if (annot.subtype === 'Text' && annot.rect) {
+              const [x1, y1, x2, y2] = annot.rect;
+              const x = Math.min(x1, x2);
+              const y = Math.min(y1, y2);
+              allComments.push({
+                page: pageNum,
+                x,
+                y,
+                text: annot.contents || '(No comment content)'
+              });
+            }
+          });
+        }
+
+        window.parent.postMessage({
+          type: 'load-embedded-comments',
+          payload: allComments
+        }, '*');
+      }
+
+      window.addEventListener('webviewerloaded', function () {
+        const waitForPdf = setInterval(() => {
+          if (PDFViewerApplication?.pdfDocument) {
+            clearInterval(waitForPdf);
+            extractAndSendAnnotations();
+          }
+        }, 200);
+      });
+
+      window.addEventListener('message',async function (event) {
+        if (event.origin !== window.parent.location.origin && event.origin !== 'http://localhost' && event.origin !== 'http://127.0.0.1') {
+          console.warn("Message from unknown origin (or incorrect security config):", event.origin);
+          return;
+        }
+
+        const data = event.data;
+        if (data && data.type === 'CREATE_PROGRAMMATIC_ANNOTATION') {
+          const detail = data.detail;
+          console.log('Received command to create annotation:', detail);
+
+          if (typeof PDFViewerApplication !== 'undefined' && PDFViewerApplication.pdfViewer) {
+            const pdfViewer = PDFViewerApplication.pdfViewer;
+
+            let annotationEditorUIManager = pdfViewer.annotationEditorUIManager;
+            if (typeof annotationEditorUIManager === 'undefined' || annotationEditorUIManager === null) {
+              annotationEditorUIManager = pdfViewer._annotationEditorUIManager;
+              if (annotationEditorUIManager) {
+                console.log('Accessed annotationEditorUIManager via _annotationEditorUIManager (internal property) as fallback.');
+              }
+            }
+
+            if (!annotationEditorUIManager || typeof annotationEditorUIManager.add !== 'function') {
+              console.error("Error: annotationEditorUIManager is undefined or its 'add' method is not a function. Cannot create annotation.");
+              console.error("PDFViewerApplication.pdfViewer:", pdfViewer);
+              return;
+            }
+
+            const AnnotationEditorType_local = PDFViewerApplication.pdfViewer.AnnotationEditorType;
+
+            if (!AnnotationEditorType_local || !AnnotationEditorType_local.TEXT || !AnnotationEditorType_local.SQUARE) {
+              console.error('Error: AnnotationEditorType enum or required types (TEXT/SQUARE) not found at PDFViewerApplication.pdfViewer.AnnotationEditorType.');
+              console.error('This indicates a problem with the PDF.js build or version. Cannot create programmatic annotation.');
+              return;
+            }
+            console.log('AnnotationEditorType found and confirmed:', AnnotationEditorType_local);
+
+
+            const pageNumber = detail.page;
+            const page = pdfViewer.getPageView(pageNumber - 1);
+
+            if (!page) {
+              console.error('Page not found for programmatic annotation:', pageNumber);
+              return;
+            }
+
+            const viewport = page.viewport;
+
+            const [pdfX, pdfY] = [0, viewport.rawDims.pageHeight];
+            
+            const annotationWidthPx = 40;
+            const annotationHeightPx = 40;
+            const annotationWidthPDF = annotationWidthPx * (1 / viewport.scale);
+            const annotationHeightPDF = annotationHeightPx * (1 / viewport.scale);
+
+            const rectPdf = [
+              pdfX,
+              pdfY - annotationHeightPDF,
+              pdfX + annotationWidthPDF,
+              pdfY
+            ];
+
+            const annotationContent = detail.text + ` (DocID: ${detail.documentid}, SCMID: ${detail.scmid}, ANFNR: ${detail.anfnr})`;
+            try {
+              annotationEditorUIManager.add({
+                kind: AnnotationEditorType_local.SQUARE,
+                pageIndex: pageNumber - 1,
+                rect: rectPdf,
+                color: '#0000FF',
+                content: annotationContent
+              });
+              console.log('Programmatic SQUARE annotation (marker) added successfully.');
+            } catch (e) {
+              console.error('Failed to add programmatic SQUARE annotation:', e);
+              console.error('Could not create any programmatic annotation through known methods.');
+            }
+
+            pdfViewer.draw();
+
+          } else {
+            console.error("PDFViewerApplication or pdfViewer not available in the iframe context.");
+          }
+        }
+        if (event.data?.type === "add-freetext-annotation") {
+          console.log("✅ Received annotation via postMessage", event.data.payload);
+
+          const { page, x, y, content } = event.data.payload;
+          const pageIndex = page - 1;
+
+          const pageView = PDFViewerApplication.pdfViewer.getPageView(pageIndex);
+          if (!pageView) {
+            console.warn("⚠️ Page view not found");
+            return;
+          }
+
+          if (!pageView.annotationEditorLayer) {
+            try {
+              await pageView.draw();
+            } catch (err) {
+              console.error("❌ Error drawing page:", err);
+              return;
+            }
+          }
+
+          const FreeTextEditor = window.PDFJSAnnotationEditor?.FreeTextEditor;
+          if (!FreeTextEditor) {
+            console.error("❌ FreeTextEditor not available.");
+            return;
+          }
+
+          const editor = new FreeTextEditor({
+            parent: pageView.annotationEditorLayer.div,
+            id: `custom-${Date.now()}`
+          });
+
+          editor.pageIndex = pageIndex;
+          editor.x = x;
+          editor.y = y;
+          editor.width = 250;
+          editor.height = 30;
+          editor.fontSize = 10;
+          editor.color = '#000000';
+          editor.value = content;
+
+          editor.div.style.left = `${x}px`;
+          editor.div.style.top = `${y}px`;
+
+          pageView.annotationEditorLayer.add(editor);
+          pageView.annotationEditorLayer.div.appendChild(editor.div);
+
+          console.log("✅ Freetext annotation inserted successfully");
+        }
+
+        if (event.data?.type === 'add-hidden-annotation') {
+          const { page, content } = event.data.payload;
+
+          // You can use this to simulate hidden annotation
+          const annotationDiv = document.createElement('div');
+          annotationDiv.className = 'hidden-pdf-annotation';
+          annotationDiv.style = 'position: absolute; top: 0; left: 0; background: yellow;';
+          // make it hidden
+          annotationDiv.textContent = content;
+          annotationDiv.setAttribute('data-page', page);
+
+          const pageContainer = document.querySelector(`.page[data-page-number="${page}"]`);
+          if (pageContainer) {
+            pageContainer.appendChild(annotationDiv);
+            console.log('Hidden annotation added to page:', page, content);
+          } else {
+            console.warn('PDF page container not found for hidden annotation.');
+          }
+        }
+
+        if (event.data?.type !== 'scroll-to-comment') return;
+
+        const { x, y, page } = event.data.payload;
+        const pageIndex = page - 1;
+        const viewerContainer = document.getElementById('viewerContainer');
+
+        PDFViewerApplication.pdfViewer.currentPageNumber = page;
+
+        setTimeout(() => {
+          const pageView = PDFViewerApplication.pdfViewer.getPageView(pageIndex);
+          const viewport = pageView.viewport;
+          const [left, top] = viewport.convertToViewportPoint(x, y);
+          const textLayer = pageView.div.querySelector('.textLayer');
+
+          if (!textLayer) return;
+          let closestSpan = null;
+          let minDist = Infinity;
+          const zoomFactor = PDFViewerApplication.pdfViewer.currentScale;
+
+          textLayer.querySelectorAll('span').forEach(span => {
+            const rect = span.getBoundingClientRect();
+
+            // Get relative to textLayer container
+            const containerRect = textLayer.getBoundingClientRect();
+            const spanLeft = rect.left - containerRect.left;
+            const spanTop = rect.top - containerRect.top;
+            const dx = spanLeft - left+10 * zoomFactor;
+            const dy = spanTop - top+10 * zoomFactor;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+
+            if (dist < minDist) {
+              minDist = dist;
+              closestSpan = span;
+            }
+          });
+
+          viewerContainer.scrollTo({
+            top: pageView.div.offsetTop + top - 100,
+            left: pageView.div.offsetLeft + left - 100,
+            behavior: 'smooth'
+          });
+
+          if (closestSpan) {
+            closestSpan.classList.add('flash-highlight');
+            setTimeout(() => closestSpan.classList.remove('flash-highlight'), 1500);
+          }
+        }, 300);
+      });
+
+      document.addEventListener('mousedown', function (e) {
+        const sel = window.getSelection();
+
+        document.addEventListener('mousemove', function handleDragStart(dragEvt) {
+          if (!sel || sel.toString().trim() === '') return;
+
+          const selectedText = sel.toString().trim();
+          const range = sel.getRangeAt(0);
+          const rect = range.getBoundingClientRect();
+          const page = e.target.closest('.page');
+          if (!page) return;
+
+          const pageNumber = parseInt(page.getAttribute('data-page-number'));
+          const pageIndex = pageNumber - 1;
+          const pageView = PDFViewerApplication.pdfViewer.getPageView(pageIndex);
+          const viewport = pageView.viewport;
+
+          const pageRect = page.getBoundingClientRect();
+          const localX = rect.left - pageRect.left;
+          const localY = rect.top - pageRect.top;
+          const [pdfX, pdfY] = viewport.convertToPdfPoint(localX, localY);
+
+          window.parent.postMessage({
+            type: 'pdf-text-selection',
+            text: selectedText,
+            fieldId: null,
+            page: pageNumber,
+            x: pdfX,
+            y: pdfY
+          }, '*');
+
+          document.removeEventListener('mousemove', handleDragStart);
+        }, { once: true });
+      });
+
+
+    </script>
+    <style>
+      .flash-highlight {
+        background-color: rgba(238, 255, 0, 0.54) !important;
+        animation: flash 1.5s ease-out;
+      }
+      @keyframes flash {
+        0% { transform: scale(1); opacity: 0.54; }
+        50% { transform: scale(1.3); opacity: 0.54; }
+        100% { transform: scale(1); opacity: 0; }
+      }
+
+    </style>
+
+    <script>
+      document.addEventListener('webviewerloaded', () => {
+        console.log("✅ webviewerloaded triggered");
+
+        document.addEventListener('add-freetext-annotation', async (e) => {
+          const { page, x, y, content } = e.detail;
+          const pageView = PDFViewerApplication.pdfViewer.getPageView(page - 1);
+          await pageView.draw();
+          const layer = pageView.annotationEditorLayer;
+          if (!layer) {
+            console.warn("❌ No annotationEditorLayer found.");
+            return;
+          }
+          const editor = layer.addNewEditor({
+            x,
+            y,
+            width: 200,
+            height: 25,
+            value: content,
+          });
+          console.log("✅ FreeText annotation added:", editor);
+        });
+      });
+    </script>
   </body>
 </html>
