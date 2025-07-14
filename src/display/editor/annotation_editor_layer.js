@@ -34,6 +34,31 @@ import { setLayerDimensions } from "../display_utils.js";
 import { SignatureEditor } from "./signature.js";
 import { StampEditor } from "./stamp.js";
 
+function getAccurateAnnotationPdfCoords(editor, pageElement, viewport) {
+  const editorRect = editor.div.getBoundingClientRect();
+  const pageRect = pageElement.getBoundingClientRect();
+
+  const localX = editorRect.left - pageRect.left;
+  const localY = editorRect.top - pageRect.top;
+
+  const width = editorRect.width;
+  const height = editorRect.height;
+
+  const pageHeight = viewport.height;
+  const adjustedY = pageHeight - localY;
+  const [pdfX, pdfY] = viewport.convertToPdfPoint(localX, adjustedY);
+
+  const [pdfX2, pdfY2] = viewport.convertToPdfPoint(localX + width, localY + height);
+
+  return {
+    x: pdfX,
+    y: pdfY,
+    width: pdfX2 - pdfX,
+    height: pdfY2 - pdfY,
+    rect: [pdfX, pdfY2, pdfX2, pdfY]
+  };
+}
+
 /**
  * @typedef {Object} AnnotationEditorLayerOptions
  * @property {Object} mode
@@ -510,94 +535,69 @@ class AnnotationEditorLayer {
       this.div.append(div);
       editor.isAttachedToDOM = true;
     }
-    
+
     editor.fixAndSetPosition();
     editor.onceAdded(!this.#isEnabling);
     this.#uiManager.addToAnnotationStorage(editor);
     editor._reportTelemetry(editor.telemetryInitialData);
 
-    if (editor.annotationType === AnnotationEditorType.HIGHLIGHT ||
-      editor.annotationType === AnnotationEditorType.RECTANGLE
+    if (
+      editor.annotationType === AnnotationEditorType.HIGHLIGHT ||
+      editor.annotationType === AnnotationEditorType.RECTANGLE ||
+      editor.annotationType === AnnotationEditorType.FREETEXT
     ) {
-      const pageNumber = this.pageIndex + 1;
+      const pageElement = this.div.closest('.page');
       let highlightedText = "";
 
       if (editor.annotationType === AnnotationEditorType.HIGHLIGHT) {
         try {
-          if (typeof editor.extractHighlightAnnotationText === 'function') {
-            if (editor.textDivs && editor.textDivs.length > 0) {
-              highlightedText = editor.textDivs.map(div => div.textContent).join(' ').trim();
+          if (typeof editor.extractHighlightAnnotationText === "function") {
+            if (editor.textDivs?.length > 0) {
+              highlightedText = editor.textDivs.map(div => div.textContent).join(" ").trim();
             } else {
               const contentDiv = editor.contentDiv || editor.div;
-              if (contentDiv) {
-                highlightedText = contentDiv.textContent.trim();
-              } else {
-                highlightedText = "Text not found (from text highlight fallback)";
-              }
+              highlightedText = contentDiv?.textContent?.trim() || "Text not found (fallback)";
             }
-          } else if (editor.textDivs) {
-            highlightedText = editor.textDivs.map(div => div.textContent).join(' ').trim();
           } else {
             const selection = window.getSelection();
-            highlightedText = selection ? selection.toString().trim() : "Text not found (from text highlight)";
+            highlightedText = selection ? selection.toString().trim() : "Text not found (selection fallback)";
           }
         } catch (e) {
           console.error("Error extracting text for highlight:", e);
-          highlightedText = "Text extraction failed for text highlight";
+          highlightedText = "Text extraction failed";
         }
       } else if (editor.annotationType === AnnotationEditorType.RECTANGLE) {
         highlightedText = "[Drawn Highlight]";
-      }
-      
-      let xPixel, yPixel, widthPixel, heightPixel;
-
-      if (editor.rect && editor.rect.length === 4) {
-        const [pdfX1, pdfY1, pdfX2, pdfY2] = editor.rect;
-        const [vx1, vy1] = this.viewport.convertToViewportPoint(pdfX1, pdfY2);
-        const [vx2, vy2] = this.viewport.convertToViewportPoint(pdfX2, pdfY1);
-
-        xPixel = Math.round(vx1);
-        yPixel = Math.round(vy1);
-        widthPixel = Math.round(vx2 - vx1);
-        heightPixel = Math.round(vy2 - vy1);
-
-        if (widthPixel < 0) {
-          xPixel += widthPixel;
-          widthPixel = Math.abs(widthPixel);
-        }
-        if (heightPixel < 0) {
-          yPixel += heightPixel;
-          heightPixel = Math.abs(heightPixel);
-        }
-
-      } else {
-        console.warn("editor.rect not found or invalid. Falling back to editor.div.offsetLeft/offsetTop.");
-        xPixel = editor.div.offsetLeft;
-        yPixel = editor.div.offsetTop;
-        widthPixel = editor.div.offsetWidth;
-        heightPixel = editor.div.offsetHeight;
+      } else if (editor.annotationType === AnnotationEditorType.FREETEXT) {
+        highlightedText = editor.value || "[FreeText]";
       }
 
-      console.log(xPixel, yPixel, widthPixel, heightPixel, widthPixel, heightPixel);
+      if (!pageElement) {
+        console.warn('Page element not found for annotation position.');
+        return;
+      }
+
+      const coords = getAccurateAnnotationPdfCoords(editor, pageElement, this.viewport);
+      editor.rect = coords.rect;
+
       const messageData = {
         type: 'PDFJS_ANNOTATION_ADDED',
         detail: {
           annotationType: editor.annotationType,
           text: highlightedText,
-          page: pageNumber,
-          x: xPixel,
-          y: yPixel,
-          width: widthPixel,
-          height: heightPixel,
+          page: this.pageIndex + 1,
+          x: coords.x,
+          y: coords.y,
+          width: coords.width,
+          height: coords.height,
           id: editor.id,
         }
       };
 
-      if (window.parent) {
-        window.parent.postMessage(messageData, '*');
-      }
+      window.parent?.postMessage(messageData, '*');
     }
   }
+
 
   moveEditorInDOM(editor) {
     if (!editor.isAttachedToDOM) {

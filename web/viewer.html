@@ -856,7 +856,6 @@ See https://github.com/adobe-type-tools/cmap-resources
         const data = event.data;
         if (data && data.type === 'CREATE_PROGRAMMATIC_ANNOTATION') {
           const detail = data.detail;
-          console.log('Received command to create annotation:', detail);
 
           if (typeof PDFViewerApplication !== 'undefined' && PDFViewerApplication.pdfViewer) {
             const pdfViewer = PDFViewerApplication.pdfViewer;
@@ -865,7 +864,6 @@ See https://github.com/adobe-type-tools/cmap-resources
             if (typeof annotationEditorUIManager === 'undefined' || annotationEditorUIManager === null) {
               annotationEditorUIManager = pdfViewer._annotationEditorUIManager;
               if (annotationEditorUIManager) {
-                console.log('Accessed annotationEditorUIManager via _annotationEditorUIManager (internal property) as fallback.');
               }
             }
 
@@ -882,8 +880,6 @@ See https://github.com/adobe-type-tools/cmap-resources
               console.error('This indicates a problem with the PDF.js build or version. Cannot create programmatic annotation.');
               return;
             }
-            console.log('AnnotationEditorType found and confirmed:', AnnotationEditorType_local);
-
 
             const pageNumber = detail.page;
             const page = pdfViewer.getPageView(pageNumber - 1);
@@ -896,7 +892,7 @@ See https://github.com/adobe-type-tools/cmap-resources
             const viewport = page.viewport;
 
             const [pdfX, pdfY] = [0, viewport.rawDims.pageHeight];
-            
+
             const annotationWidthPx = 40;
             const annotationHeightPx = 40;
             const annotationWidthPDF = annotationWidthPx * (1 / viewport.scale);
@@ -918,7 +914,6 @@ See https://github.com/adobe-type-tools/cmap-resources
                 color: '#0000FF',
                 content: annotationContent
               });
-              console.log('Programmatic SQUARE annotation (marker) added successfully.');
             } catch (e) {
               console.error('Failed to add programmatic SQUARE annotation:', e);
               console.error('Could not create any programmatic annotation through known methods.');
@@ -931,32 +926,6 @@ See https://github.com/adobe-type-tools/cmap-resources
           }
         }
         if (event.data?.type === "add-freetext-annotation") {
-          console.log("✅ Received annotation via postMessage", event.data.payload);
-
-          const { page, x, y, content } = event.data.payload;
-          const pageIndex = page - 1;
-
-          const pageView = PDFViewerApplication.pdfViewer.getPageView(pageIndex);
-          if (!pageView) {
-            console.warn("⚠️ Page view not found");
-            return;
-          }
-
-          if (!pageView.annotationEditorLayer) {
-            try {
-              await pageView.draw();
-            } catch (err) {
-              console.error("❌ Error drawing page:", err);
-              return;
-            }
-          }
-
-          const FreeTextEditor = window.PDFJSAnnotationEditor?.FreeTextEditor;
-          if (!FreeTextEditor) {
-            console.error("❌ FreeTextEditor not available.");
-            return;
-          }
-
           const editor = new FreeTextEditor({
             parent: pageView.annotationEditorLayer.div,
             id: `custom-${Date.now()}`
@@ -974,15 +943,17 @@ See https://github.com/adobe-type-tools/cmap-resources
           editor.div.style.left = `${x}px`;
           editor.div.style.top = `${y}px`;
 
+// ✅ Set .rect explicitly to match how PDF.js internally expects position
+          editor.rect = pageView.viewport.convertToPdfRect([x, y, x + editor.width, y + editor.height]);
+
           pageView.annotationEditorLayer.add(editor);
           pageView.annotationEditorLayer.div.appendChild(editor.div);
-
-          console.log("✅ Freetext annotation inserted successfully");
         }
 
         if (event.data?.type === 'add-hidden-annotation') {
           const { page, content } = event.data.payload;
 
+          // You can use this to simulate hidden annotation
           // You can use this to simulate hidden annotation
           const annotationDiv = document.createElement('div');
           annotationDiv.className = 'hidden-pdf-annotation';
@@ -994,59 +965,59 @@ See https://github.com/adobe-type-tools/cmap-resources
           const pageContainer = document.querySelector(`.page[data-page-number="${page}"]`);
           if (pageContainer) {
             pageContainer.appendChild(annotationDiv);
-            console.log('Hidden annotation added to page:', page, content);
           } else {
             console.warn('PDF page container not found for hidden annotation.');
           }
         }
 
-        if (event.data?.type !== 'scroll-to-comment') return;
+        if (event.data?.type === 'scroll-to-comment') {
+          const { x, y, page } = event.data.payload;
+          const pageIndex = page - 1;
+          const viewerContainer = document.getElementById('viewerContainer');
 
-        const { x, y, page } = event.data.payload;
-        const pageIndex = page - 1;
-        const viewerContainer = document.getElementById('viewerContainer');
+          PDFViewerApplication.pdfViewer.currentPageNumber = page;
 
-        PDFViewerApplication.pdfViewer.currentPageNumber = page;
+          setTimeout(() => {
+            const pageView = PDFViewerApplication.pdfViewer.getPageView(pageIndex);
+            const viewport = pageView.viewport;
+            const [left, top] = viewport.convertToViewportPoint(x, y);
+            const textLayer = pageView.div.querySelector('.textLayer');
 
-        setTimeout(() => {
-          const pageView = PDFViewerApplication.pdfViewer.getPageView(pageIndex);
-          const viewport = pageView.viewport;
-          const [left, top] = viewport.convertToViewportPoint(x, y);
-          const textLayer = pageView.div.querySelector('.textLayer');
+            if (!textLayer) return;
+            let closestSpan = null;
+            let minDist = Infinity;
+            const zoomFactor = PDFViewerApplication.pdfViewer.currentScale;
 
-          if (!textLayer) return;
-          let closestSpan = null;
-          let minDist = Infinity;
-          const zoomFactor = PDFViewerApplication.pdfViewer.currentScale;
+            textLayer.querySelectorAll('span').forEach(span => {
+              const rect = span.getBoundingClientRect();
 
-          textLayer.querySelectorAll('span').forEach(span => {
-            const rect = span.getBoundingClientRect();
+              // Get relative to textLayer container
+              const containerRect = textLayer.getBoundingClientRect();
+              const spanLeft = rect.left - containerRect.left;
+              const spanTop = rect.top - containerRect.top;
+              const dx = spanLeft - left+10 * zoomFactor;
+              const dy = spanTop - top+10 * zoomFactor;
+              const dist = Math.sqrt(dx * dx + dy * dy);
 
-            // Get relative to textLayer container
-            const containerRect = textLayer.getBoundingClientRect();
-            const spanLeft = rect.left - containerRect.left;
-            const spanTop = rect.top - containerRect.top;
-            const dx = spanLeft - left+10 * zoomFactor;
-            const dy = spanTop - top+10 * zoomFactor;
-            const dist = Math.sqrt(dx * dx + dy * dy);
+              if (dist < minDist) {
+                minDist = dist;
+                closestSpan = span;
+              }
+            });
 
-            if (dist < minDist) {
-              minDist = dist;
-              closestSpan = span;
+            viewerContainer.scrollTo({
+              top: pageView.div.offsetTop + top - 100,
+              left: pageView.div.offsetLeft + left - 100,
+              behavior: 'smooth'
+            });
+
+            if (closestSpan) {
+              closestSpan.classList.add('flash-highlight');
+              setTimeout(() => closestSpan.classList.remove('flash-highlight'), 1500);
             }
-          });
+          }, 300);
+        }
 
-          viewerContainer.scrollTo({
-            top: pageView.div.offsetTop + top - 100,
-            left: pageView.div.offsetLeft + left - 100,
-            behavior: 'smooth'
-          });
-
-          if (closestSpan) {
-            closestSpan.classList.add('flash-highlight');
-            setTimeout(() => closestSpan.classList.remove('flash-highlight'), 1500);
-          }
-        }, 300);
       });
 
       document.addEventListener('mousedown', function (e) {
@@ -1101,8 +1072,6 @@ See https://github.com/adobe-type-tools/cmap-resources
 
     <script>
       document.addEventListener('webviewerloaded', () => {
-        console.log("✅ webviewerloaded triggered");
-
         document.addEventListener('add-freetext-annotation', async (e) => {
           const { page, x, y, content } = e.detail;
           const pageView = PDFViewerApplication.pdfViewer.getPageView(page - 1);
@@ -1119,7 +1088,6 @@ See https://github.com/adobe-type-tools/cmap-resources
             height: 25,
             value: content,
           });
-          console.log("✅ FreeText annotation added:", editor);
         });
       });
     </script>
