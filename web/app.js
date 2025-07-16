@@ -1228,6 +1228,35 @@ const PDFViewerApplication = {
     }
   },
 
+  async update() {
+    if (this._saveInProgress) {
+      return;
+    }
+    this._saveInProgress = true;
+    await this.pdfScriptingManager.dispatchWillSave();
+
+    try {
+      const data = await this.pdfDocument.saveDocument();
+      // this.downloadManager.download(data, this._downloadUrl, this._docFilename);
+      const blob = new Blob([new Uint8Array(data)], {type: 'application/pdf'});
+
+      // Instead of downloading, send blob to parent for server save
+      window.parent.postMessage({
+        type: 'pdf-blob-response',
+        payload: blob
+      }, '*');
+
+      console.log('PDF successfully uploaded to server.');
+    } catch (reason) {
+      // When the PDF document isn't ready, fallback to a "regular" download.
+      console.error(`Error when saving the document:`, reason);
+      // await this.download();
+    } finally {
+      await this.pdfScriptingManager.dispatchDidSave();
+      this._saveInProgress = false;
+    }
+  },
+
   async downloadOrSave() {
     // In the Firefox case, this method MUST always trigger a download.
     // When the user is closing a modified and unsaved document, we display a
@@ -2287,6 +2316,60 @@ const PDFViewerApplication = {
    */
   get scriptingReady() {
     return this.pdfScriptingManager.ready;
+  },
+  createProgrammaticAnnotation: async function({ documentid, scmid, anfnr }) {
+    // this function should create a layer when called and add documentid scmid and anfnr but it's soooo buggy
+    try {
+      const pageIndex = 0;
+      const content = `DocID: ${documentid}, SCMID: ${scmid}, ANFNR: ${anfnr}`;
+      const pageView = PDFViewerApplication.pdfViewer.getPageView(pageIndex);
+      if (!pageView) return console.error("❌ Page view not ready.");
+
+      const toolButton = document.getElementById("editorFreeTextButton");
+      if (!toolButton) return console.error("❌ FreeText tool button not found.");
+      toolButton.click();
+
+      // Allow PDF.js to enter FreeText mode
+      await new Promise(res => setTimeout(res, 50));
+
+      // Simulate click at PDF coords (0.01, 0.01) converted to viewport
+      const [clickX, clickY] = pageView.viewport.convertToViewportPoint(0.01, pageView.viewport.height - 0.01);
+
+      const annotationLayerDiv = pageView.div.querySelector(".annotationEditorLayer");
+      if (!annotationLayerDiv) return console.error("❌ No annotation layer.");
+
+      ["mousedown", "mouseup"].forEach(type => {
+        annotationLayerDiv.dispatchEvent(new MouseEvent(type, {
+          bubbles: true,
+          cancelable: true,
+          clientX: clickX,
+          clientY: clickY,
+          view: window,
+        }));
+      });
+
+      await new Promise(res => setTimeout(res, 100));
+
+      // Get the internal editor
+      const annotationLayer = pageView.annotationEditorLayer;
+      const editors = annotationLayer._editors;
+      if (!editors || editors.length === 0) return console.error("❌ No FreeText editor found.");
+
+      const editor = editors[editors.length - 1];
+
+      // Use official FreeTextEditor API methods (not DOM!)
+      editor.setText(content); // Sets internal #content and div text
+      editor.updateParams("freetextColor", "#ffffff");
+      editor.updateParams("freetextSize", 6);
+
+      editor.commitOrRemove(); // commit = save, remove = delete if empty
+
+      toolButton.click(); // turn off freetext mode
+
+      console.log("✅ Annotation added and saved near (0,0)");
+    } catch (err) {
+      console.error("❌ Error in createProgrammaticAnnotation:", err);
+    }
   },
 };
 

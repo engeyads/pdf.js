@@ -805,7 +805,47 @@ See https://github.com/adobe-type-tools/cmap-resources
 
     </div> <!-- outerContainer -->
     <div id="printContainer"></div>
+    <script src="https://unpkg.com/pdf-annotate.js@1.2.2/dist/pdf-annotate.min.js"></script>
+
     <script>
+
+      document.addEventListener('pagesloaded', () => {
+        PDFAnnotate.setStoreAdapter(new PDFAnnotate.LocalStoreAdapter());
+        const viewer = document.getElementById('viewer');
+
+        PDFViewerApplication.pdfDocument.getData().then(data => {
+          const blob = new Blob([data], { type: 'application/pdf' });
+          const url = URL.createObjectURL(blob);
+
+          new PDFAnnotate('pdf-annotate-container', url, {
+            pdfjsLib,
+            pdfjsViewer,
+          }).then(instance => {
+            window.annotator = instance;
+          });
+        });
+      });
+
+      // Step 3: Define programmatic annotation trigger
+      window.addRealAnnotation = function ({ page, x, y, text }) {
+        if (!window.annotator) return;
+        window.annotator.addAnnotation({
+          type: 'freetext',
+          page: page,
+          x: x,
+          y: y,
+          width: 150,
+          height: 20,
+          color: '#FF0',
+          text: text,
+        });
+      };
+
+      // Step 4: Add save/download (optional)
+      window.saveAnnotatedPDF = function () {
+        if (!window.annotator) return;
+        window.annotator.download('annotated.pdf');
+      };
 
       async function extractAndSendAnnotations() {
         const pdfDoc = PDFViewerApplication?.pdfDocument;
@@ -853,80 +893,12 @@ See https://github.com/adobe-type-tools/cmap-resources
           return;
         }
 
-        const data = event.data;
-        if (data && data.type === 'CREATE_PROGRAMMATIC_ANNOTATION') {
-          const detail = data.detail;
-
-          if (typeof PDFViewerApplication !== 'undefined' && PDFViewerApplication.pdfViewer) {
-            const pdfViewer = PDFViewerApplication.pdfViewer;
-
-            let annotationEditorUIManager = pdfViewer.annotationEditorUIManager;
-            if (typeof annotationEditorUIManager === 'undefined' || annotationEditorUIManager === null) {
-              annotationEditorUIManager = pdfViewer._annotationEditorUIManager;
-              if (annotationEditorUIManager) {
-              }
-            }
-
-            if (!annotationEditorUIManager || typeof annotationEditorUIManager.add !== 'function') {
-              console.error("Error: annotationEditorUIManager is undefined or its 'add' method is not a function. Cannot create annotation.");
-              console.error("PDFViewerApplication.pdfViewer:", pdfViewer);
-              return;
-            }
-
-            const AnnotationEditorType_local = PDFViewerApplication.pdfViewer.AnnotationEditorType;
-
-            if (!AnnotationEditorType_local || !AnnotationEditorType_local.TEXT || !AnnotationEditorType_local.SQUARE) {
-              console.error('Error: AnnotationEditorType enum or required types (TEXT/SQUARE) not found at PDFViewerApplication.pdfViewer.AnnotationEditorType.');
-              console.error('This indicates a problem with the PDF.js build or version. Cannot create programmatic annotation.');
-              return;
-            }
-
-            const pageNumber = detail.page;
-            const page = pdfViewer.getPageView(pageNumber - 1);
-
-            if (!page) {
-              console.error('Page not found for programmatic annotation:', pageNumber);
-              return;
-            }
-
-            const viewport = page.viewport;
-
-            const [pdfX, pdfY] = [0, viewport.rawDims.pageHeight];
-
-            const annotationWidthPx = 40;
-            const annotationHeightPx = 40;
-            const annotationWidthPDF = annotationWidthPx * (1 / viewport.scale);
-            const annotationHeightPDF = annotationHeightPx * (1 / viewport.scale);
-
-            const rectPdf = [
-              pdfX,
-              pdfY - annotationHeightPDF,
-              pdfX + annotationWidthPDF,
-              pdfY
-            ];
-
-            const annotationContent = detail.text + ` (DocID: ${detail.documentid}, SCMID: ${detail.scmid}, ANFNR: ${detail.anfnr})`;
-            try {
-              annotationEditorUIManager.add({
-                kind: AnnotationEditorType_local.SQUARE,
-                pageIndex: pageNumber - 1,
-                rect: rectPdf,
-                color: '#0000FF',
-                content: annotationContent
-              });
-            } catch (e) {
-              console.error('Failed to add programmatic SQUARE annotation:', e);
-              console.error('Could not create any programmatic annotation through known methods.');
-            }
-
-            pdfViewer.draw();
-
-          } else {
-            console.error("PDFViewerApplication or pdfViewer not available in the iframe context.");
-          }
+        if (event.data?.type === "update-file") {
+          await PDFViewerApplication.update();
         }
+
         if (event.data?.type === "add-freetext-annotation") {
-          const editor = new FreeTextEditor({
+          const editor = new window.FreeTextEditor({
             parent: pageView.annotationEditorLayer.div,
             id: `custom-${Date.now()}`
           });
@@ -948,6 +920,41 @@ See https://github.com/adobe-type-tools/cmap-resources
 
           pageView.annotationEditorLayer.add(editor);
           pageView.annotationEditorLayer.div.appendChild(editor.div);
+        }
+
+        if (event.data?.type === 'highlight-pdf-selection') {
+          const { text, page } = event.data.payload;
+          const pageIndex = page - 1;
+
+          const pageView = PDFViewerApplication.pdfViewer.getPageView(pageIndex);
+          if (!pageView) {
+            console.warn("❌ Could not get pageView for page", page);
+            return;
+          }
+
+          const highlightTextInTextLayer = () => {
+            const textLayer = pageView.textLayer?.textDivs || [];
+            let matchFound = false;
+
+            for (const div of textLayer) {
+              if (div.textContent.includes(text)) {
+                div.classList.add('pdf-drag-highlight');
+                matchFound = true;
+                break; // Only highlight first match (or remove break for all)
+              }
+            }
+
+            if (!matchFound) {
+              console.warn("❌ No matching div found for text:", text);
+            }
+          };
+
+          if (pageView.textLayer?.renderingDone) {
+            highlightTextInTextLayer();
+          } else {
+            // Wait for rendering to complete
+            pageView.textLayer?.render().then(highlightTextInTextLayer);
+          }
         }
 
         if (event.data?.type === 'add-hidden-annotation') {

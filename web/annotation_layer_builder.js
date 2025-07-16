@@ -68,6 +68,28 @@ import { PresentationModeState } from "./ui_utils.js";
  * @property {StructTreeLayerBuilder} [structTreeLayer]
  */
 
+
+
+class CustomAnnotation {
+  constructor({ x, y, content }) {
+    this.x = x;
+    this.y = y;
+    this.content = content;
+  }
+
+  render(div) {
+    const el = document.createElement('div');
+    el.className = 'custom-annotation';
+    el.style.position = 'absolute';
+    el.style.left = `${this.x * 100}%`;
+    el.style.top = `${this.y * 100}%`;
+    el.style.background = 'rgba(255,255,0,0.7)';
+    el.style.padding = '2px 6px';
+    el.textContent = this.content;
+    div.appendChild(el);
+  }
+}
+
 class AnnotationLayerBuilder {
   #annotations = null;
 

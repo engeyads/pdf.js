@@ -591,6 +591,7 @@ class AnnotationEditorLayer {
           width: coords.width,
           height: coords.height,
           id: editor.id,
+          color: editor.color || null,
         }
       };
 
