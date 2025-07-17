@@ -542,36 +542,10 @@ class AnnotationEditorLayer {
     editor._reportTelemetry(editor.telemetryInitialData);
 
     if (
-      editor.annotationType === AnnotationEditorType.HIGHLIGHT ||
-      editor.annotationType === AnnotationEditorType.RECTANGLE ||
-      editor.annotationType === AnnotationEditorType.FREETEXT
+      this.#uiManager.getMode() === AnnotationEditorType.HIGHLIGHT ||
+      this.#uiManager.getMode() === AnnotationEditorType.FREETEXT
     ) {
       const pageElement = this.div.closest('.page');
-      let highlightedText = "";
-
-      if (editor.annotationType === AnnotationEditorType.HIGHLIGHT) {
-        try {
-          if (typeof editor.extractHighlightAnnotationText === "function") {
-            if (editor.textDivs?.length > 0) {
-              highlightedText = editor.textDivs.map(div => div.textContent).join(" ").trim();
-            } else {
-              const contentDiv = editor.contentDiv || editor.div;
-              highlightedText = contentDiv?.textContent?.trim() || "Text not found (fallback)";
-            }
-          } else {
-            const selection = window.getSelection();
-            highlightedText = selection ? selection.toString().trim() : "Text not found (selection fallback)";
-          }
-        } catch (e) {
-          console.error("Error extracting text for highlight:", e);
-          highlightedText = "Text extraction failed";
-        }
-      } else if (editor.annotationType === AnnotationEditorType.RECTANGLE) {
-        highlightedText = "[Drawn Highlight]";
-      } else if (editor.annotationType === AnnotationEditorType.FREETEXT) {
-        highlightedText = editor.value || "[FreeText]";
-      }
-
       if (!pageElement) {
         console.warn('Page element not found for annotation position.');
         return;
@@ -580,22 +554,50 @@ class AnnotationEditorLayer {
       const coords = getAccurateAnnotationPdfCoords(editor, pageElement, this.viewport);
       editor.rect = coords.rect;
 
-      const messageData = {
-        type: 'PDFJS_ANNOTATION_ADDED',
-        detail: {
-          annotationType: editor.annotationType,
-          text: highlightedText,
-          page: this.pageIndex + 1,
-          x: coords.x,
-          y: coords.y,
-          width: coords.width,
-          height: coords.height,
-          id: editor.id,
-          color: editor.color || null,
-        }
-      };
+      let highlightedText = "",
+        messageData = {};
 
-      window.parent?.postMessage(messageData, '*');
+      if (this.#uiManager.getMode() === AnnotationEditorType.HIGHLIGHT) {
+        highlightedText = editor.text || "[Drawn Highlight]";
+
+        messageData = {
+          type: 'PDFJS_ANNOTATION_ADDED',
+          detail: {
+            annotationType: this.#uiManager.getMode(),
+            text: highlightedText,
+            page: this.pageIndex + 1,
+            x: coords.x,
+            y: coords.y,
+            width: coords.width,
+            height: coords.height,
+            id: editor.id,
+            color: editor.color || null,
+          }
+        };
+        console.log(messageData);
+        window.parent?.postMessage(messageData, '*');
+      } else if (this.#uiManager.getMode() === AnnotationEditorType.FREETEXT) {
+        const div = editor.div;
+        div.addEventListener("blur", () => {
+          highlightedText = div?.textContent?.trim() || "[FreeText]";
+          messageData = {
+            type: 'PDFJS_ANNOTATION_ADDED',
+            detail: {
+              annotationType: this.#uiManager.getMode(),
+              text: highlightedText,
+              page: this.pageIndex + 1,
+              x: coords.x,
+              y: coords.y,
+              width: coords.width,
+              height: coords.height,
+              id: editor.id,
+              color: editor.color || window.getComputedStyle(div).color || null,
+            }
+          };
+          console.log(messageData);
+          window.parent?.postMessage(messageData, '*');
+        });
+      }
     }
   }
 

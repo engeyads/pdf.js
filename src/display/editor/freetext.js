@@ -165,6 +165,10 @@ class FreeTextEditor extends AnnotationEditor {
     }
   }
 
+  getContent() {
+    return this.#content || null;
+  }
+
   /** @inheritdoc */
   updateParams(type, value) {
     switch (type) {
@@ -781,6 +785,7 @@ class FreeTextEditor extends AnnotationEditor {
         position: textPosition,
         pageIndex: pageNumber - 1,
         rect: rect.slice(0),
+        text: this.#content,
         rotation,
         id,
         deleted: false,
@@ -822,6 +827,7 @@ class FreeTextEditor extends AnnotationEditor {
       value: this.#serializeContent(),
       pageIndex: this.pageIndex,
       rect,
+      text: this.#content,
       rotation: this.rotation,
       structTreeParentId: this._structTreeParentId,
     };

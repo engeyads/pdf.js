@@ -68,6 +68,10 @@ class HighlightEditor extends AnnotationEditor {
 
   #text = "";
 
+  text = "";
+
+  id = null;
+
   #thickness;
 
   #methodOfCreation = "";
@@ -109,7 +113,7 @@ class HighlightEditor extends AnnotationEditor {
     this.#opacity = params.opacity || HighlightEditor._defaultOpacity;
     this.#boxes = params.boxes || null;
     this.#methodOfCreation = params.methodOfCreation || "";
-    this.#text = params.text || "";
+    this.#text = this.text = params.text || "";
     this._isDraggable = false;
     this.defaultL10nId = "pdfjs-editor-highlight-editor";
 
@@ -128,6 +132,9 @@ class HighlightEditor extends AnnotationEditor {
     }
   }
 
+  getText() {
+    return this.#text || null;
+  }
   /** @inheritdoc */
   get telemetryInitialData() {
     return {
@@ -187,7 +194,7 @@ class HighlightEditor extends AnnotationEditor {
     );
 
     if (highlightId >= 0) {
-      this.#id = highlightId;
+      this.id = this.#id = highlightId;
       this.#clipPathId = clipPathId;
       // We need to redraw the highlight because we change the coordinates to be
       // in the box coordinate system.
@@ -513,7 +520,7 @@ class HighlightEditor extends AnnotationEditor {
       return;
     }
     this.parent.drawLayer.remove(this.#id);
-    this.#id = null;
+    this.id = this.#id = null;
     this.parent.drawLayer.remove(this.#outlineId);
     this.#outlineId = null;
   }
@@ -905,6 +912,7 @@ class HighlightEditor extends AnnotationEditor {
         boxes: null,
         pageIndex: pageNumber - 1,
         rect: rect.slice(0),
+        text: this.text,
         rotation,
         id,
         deleted: false,
@@ -1013,6 +1021,7 @@ class HighlightEditor extends AnnotationEditor {
       outlines: this.#serializeOutlines(rect),
       pageIndex: this.pageIndex,
       rect,
+      text: this.text,
       rotation: this.#getRotation(),
       structTreeParentId: this._structTreeParentId,
     };
