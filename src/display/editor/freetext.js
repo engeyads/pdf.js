@@ -38,6 +38,8 @@ class FreeTextEditor extends AnnotationEditor {
 
   #content = "";
 
+  content = "";
+
   #editorDivId = `${this.id}-editor`;
 
   #editModeAC = null;
@@ -459,13 +461,13 @@ class FreeTextEditor extends AnnotationEditor {
     super.commit();
     this.disableEditMode();
     const savedText = this.#content;
-    const newText = (this.#content = this.#extractText().trimEnd());
+    const newText = (this.#content = this.content = this.#extractText().trimEnd());
     if (savedText === newText) {
       return;
     }
 
     const setText = text => {
-      this.#content = text;
+      this.#content = this.content = text;
       if (!text) {
         this.remove();
         return;
@@ -704,7 +706,7 @@ class FreeTextEditor extends AnnotationEditor {
         buffer.push(FreeTextEditor.#getNodeContent(child));
       }
     }
-    this.#content = `${bufferBefore.join("\n")}${paste}${bufferAfter.join("\n")}`;
+    this.#content = this.content = `${bufferBefore.join("\n")}${paste}${bufferAfter.join("\n")}`;
     this.#setContent();
 
     // Set the caret at the right position.
@@ -785,7 +787,7 @@ class FreeTextEditor extends AnnotationEditor {
         position: textPosition,
         pageIndex: pageNumber - 1,
         rect: rect.slice(0),
-        text: this.#content,
+        text: this.content,
         rotation,
         id,
         deleted: false,
@@ -795,7 +797,7 @@ class FreeTextEditor extends AnnotationEditor {
     const editor = await super.deserialize(data, parent, uiManager);
     editor.#fontSize = data.fontSize;
     editor.#color = Util.makeHexColor(...data.color);
-    editor.#content = FreeTextEditor.#deserializeContent(data.value);
+    editor.#content = this.content = FreeTextEditor.#deserializeContent(data.value);
     editor.annotationElementId = data.id || null;
     editor._initialData = initialData;
 
@@ -827,7 +829,7 @@ class FreeTextEditor extends AnnotationEditor {
       value: this.#serializeContent(),
       pageIndex: this.pageIndex,
       rect,
-      text: this.#content,
+      text: this.content,
       rotation: this.rotation,
       structTreeParentId: this._structTreeParentId,
     };

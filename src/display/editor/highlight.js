@@ -70,8 +70,6 @@ class HighlightEditor extends AnnotationEditor {
 
   text = "";
 
-  id = null;
-
   #thickness;
 
   #methodOfCreation = "";
@@ -194,7 +192,7 @@ class HighlightEditor extends AnnotationEditor {
     );
 
     if (highlightId >= 0) {
-      this.id = this.#id = highlightId;
+      this.#id = highlightId;
       this.#clipPathId = clipPathId;
       // We need to redraw the highlight because we change the coordinates to be
       // in the box coordinate system.
@@ -520,7 +518,7 @@ class HighlightEditor extends AnnotationEditor {
       return;
     }
     this.parent.drawLayer.remove(this.#id);
-    this.id = this.#id = null;
+    this.#id = null;
     this.parent.drawLayer.remove(this.#outlineId);
     this.#outlineId = null;
   }

@@ -1333,11 +1333,6 @@ const PDFViewerApplication = {
     }
     this.loadingBar.percent = percent;
 
-    // When disableAutoFetch is enabled, it's not uncommon for the entire file
-    // to never be fetched (depends on e.g. the file structure). In this case
-    // the loading bar will not be completely filled, nor will it be hidden.
-    // To prevent displaying a partially filled loading bar permanently, we
-    // hide it when no data has been loaded during a certain amount of time.
     if (
       this.pdfDocument?.loadingParams.disableAutoFetch ??
       AppOptions.get("disableAutoFetch")
@@ -1345,7 +1340,113 @@ const PDFViewerApplication = {
       this.loadingBar.setDisableAutoFetch();
     }
   },
+  async addFreetextAnnotation({page, x, y, text, fontSize = 12, color = '#000'}){
+    if (!this.pdfViewer) {
+      console.warn("PDF viewer not initialized yet. Cannot add annotation.");
+      return;
+    }
+console.log(this.pdfViewer.annotationEditorMode);
+    this.pdfViewer.annotationEditorMode = {
+      mode: AnnotationEditorType.NONE,
+      editId: null,
+      isFromKeyboard: false,
+    };
 
+    this.pdfViewer.annotationEditorMode = {
+      mode: AnnotationEditorType.FREETEXT,
+      editId: null,
+      isFromKeyboard: false,
+    };
+
+    const pageView = this.pdfViewer.getPageView(page - 1);
+    if (!pageView) {
+      console.warn("Page view not available for page:", page);
+      return;
+    }
+
+    if (!pageView.annotationEditorLayer) {
+      await pageView.draw(); // Wait for the page to draw
+      if (!pageView.annotationEditorLayer) {
+        console.error("Annotation editor layer is still missing after drawing page. Cannot proceed with adding annotation.");
+        return;
+      }
+    }
+
+    setTimeout(() => {
+      const layerBuilder = pageView.annotationEditorLayer?.annotationEditorLayer;
+      if (!layerBuilder || typeof layerBuilder.createAndAddNewEditor !== "function") {
+        console.error("❌ AnnotationEditorLayerBuilder not ready:", layerBuilder);
+        return;
+      }
+
+      const fakeEvent = {
+        offsetX: x,
+        offsetY: y,
+      };
+
+      const editor = layerBuilder.createAndAddNewEditor(
+        fakeEvent,
+        false,
+        {
+          type: AnnotationEditorType.FREETEXT,
+          width: 200,
+          height: 25,
+        }
+      );
+
+      if (!editor) {
+        console.error("❌ Failed to create editor instance.");
+        return;
+      }
+
+      // Set content and styling
+      editor._content = text;
+      editor.content = text;
+      editor.editorDiv.textContent = text;
+      editor.editorDiv.style.fontSize = `${fontSize}px`;
+      editor.editorDiv.style.color = color;
+
+      // Append to DOM if needed
+      if (!editor.parent && layerBuilder?.div && !editor.div.isConnected) {
+        layerBuilder.div.appendChild(editor.div);
+        editor.attachToDOM?.();
+      }
+
+      // Mark as edited and finalize
+      const editorDiv = editor.editorDiv;
+      if (editorDiv) {
+        // Set visual content
+        editorDiv.textContent = text;
+        editorDiv.style.fontSize = `${fontSize}px`;
+        editorDiv.style.color = color;
+        editor.div.setAttribute("contenteditable", "false");
+
+        // Internal state updates
+        if ("_content" in editor) editor._content = text;
+        if ("content" in editor) editor.content = text;
+
+        // Ensure it's tracked by annotation storage
+        editor._uiManager?.addToAnnotationStorage(editor);
+
+        // Finalize edits
+        if (typeof editor.commit === "function") editor.commit();
+
+        // Optional: visually deselect
+        editor.editorDiv.blur?.();
+      } else {
+        console.warn("❌ Cannot find the editable div inside the editor instance.");
+      }
+
+      // Disable annotation mode AFTER commit
+      setTimeout(() => {
+        this.pdfViewer.annotationEditorMode = {
+          mode: AnnotationEditorType.NONE,
+          editId: editorDiv.id,
+          isFromKeyboard: false,
+        };
+      }, 200);
+    }, 100);
+  },
   load(pdfDocument) {
     this.pdfDocument = pdfDocument;
 
@@ -2374,6 +2475,62 @@ const PDFViewerApplication = {
 };
 
 initCom(PDFViewerApplication);
+
+(function listenForLoadedDocument() {
+  const eventBus = window.PDFViewerApplication?.eventBus;
+  if (!eventBus) {
+    console.warn('eventBus not ready, retrying...');
+    setTimeout(listenForLoadedDocument, 100);
+    return;
+  }
+
+  eventBus.on('documentloaded', async () => {
+    try {
+      const pdf = PDFViewerApplication.pdfDocument;
+      const numPages = pdf.numPages;
+
+      for (let pageNum = 1; pageNum <= numPages; pageNum++) {
+        const page = await pdf.getPage(pageNum);
+        const annotations = await page.getAnnotations();
+
+        for (const annot of annotations) {
+          console.log('[ANNOTATION RAW]', annot);
+
+          const textContent = annot.contents?.trim() || annot.contentsObj?.str?.trim() || '';
+
+          if (
+            annot.subtype === 'FreeText' &&
+            typeof textContent === 'string' &&
+            textContent.includes('{documentationId:')
+          ) {
+            const match = textContent.match(/documentationId\s*:\s*"?(\d+)"?/);
+            if (match && match[1]) {
+              const documentationId = match[1];
+              console.log('[ANNOTATION FOUND]', documentationId);
+              window.parent.postMessage(
+                {
+                  type: 'custom-annotation-detected',
+                  payload: {
+                    documentationId,
+                    schid: 316,
+                  },
+                },
+                '*'
+              );
+              return;
+            }
+          }
+        }
+      }
+
+      console.log('[NO custom annotation found]');
+      window.parent.postMessage({ type: 'custom-annotation-not-found' }, '*');
+    } catch (e) {
+      console.error('Annotation parsing failed:', e);
+    }
+  });
+})();
+
 
 if (typeof PDFJSDev === "undefined" || !PDFJSDev.test("MOZCENTRAL")) {
   PDFPrintServiceFactory.initGlobals(PDFViewerApplication);

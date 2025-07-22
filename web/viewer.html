@@ -805,10 +805,8 @@ See https://github.com/adobe-type-tools/cmap-resources
 
     </div> <!-- outerContainer -->
     <div id="printContainer"></div>
-    <script src="https://unpkg.com/pdf-annotate.js@1.2.2/dist/pdf-annotate.min.js"></script>
 
     <script>
-
       document.addEventListener('pagesloaded', () => {
         PDFAnnotate.setStoreAdapter(new PDFAnnotate.LocalStoreAdapter());
         const viewer = document.getElementById('viewer');
@@ -825,21 +823,6 @@ See https://github.com/adobe-type-tools/cmap-resources
           });
         });
       });
-
-      // Step 3: Define programmatic annotation trigger
-      window.addRealAnnotation = function ({ page, x, y, text }) {
-        if (!window.annotator) return;
-        window.annotator.addAnnotation({
-          type: 'freetext',
-          page: page,
-          x: x,
-          y: y,
-          width: 150,
-          height: 20,
-          color: '#FF0',
-          text: text,
-        });
-      };
 
       // Step 4: Add save/download (optional)
       window.saveAnnotatedPDF = function () {
@@ -894,7 +877,10 @@ See https://github.com/adobe-type-tools/cmap-resources
         }
 
         if (event.data?.type === "update-file") {
-          await PDFViewerApplication.update();
+          const vals = event.data.vals;
+          await PDFViewerApplication.addFreetextAnnotation(vals).then( async function(){
+            await PDFViewerApplication.update();
+          })
         }
 
         if (event.data?.type === "add-freetext-annotation") {
@@ -909,13 +895,13 @@ See https://github.com/adobe-type-tools/cmap-resources
           editor.width = 250;
           editor.height = 30;
           editor.fontSize = 10;
-          editor.color = '#000000';
+          editor.color = '#000';
           editor.value = content;
 
           editor.div.style.left = `${x}px`;
           editor.div.style.top = `${y}px`;
 
-// ✅ Set .rect explicitly to match how PDF.js internally expects position
+          // ✅ Set .rect explicitly to match how PDF.js internally expects position
           editor.rect = pageView.viewport.convertToPdfRect([x, y, x + editor.width, y + editor.height]);
 
           pageView.annotationEditorLayer.add(editor);
@@ -948,13 +934,6 @@ See https://github.com/adobe-type-tools/cmap-resources
               console.warn("❌ No matching div found for text:", text);
             }
           };
-
-          if (pageView.textLayer?.renderingDone) {
-            highlightTextInTextLayer();
-          } else {
-            // Wait for rendering to complete
-            pageView.textLayer?.render().then(highlightTextInTextLayer);
-          }
         }
 
         if (event.data?.type === 'add-hidden-annotation') {
@@ -1055,7 +1034,13 @@ See https://github.com/adobe-type-tools/cmap-resources
             fieldId: null,
             page: pageNumber,
             x: pdfX,
-            y: pdfY
+            y: pdfY,
+            color: "#000",
+            guid: {
+              x: pdfX,
+              y: pdfY,
+              color: "#000"
+            }
           }, '*');
 
           document.removeEventListener('mousemove', handleDragStart);

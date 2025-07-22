@@ -556,7 +556,7 @@ class AnnotationEditorLayer {
 
       let highlightedText = "",
         messageData = {};
-
+      let id = this.getNextId();
       if (this.#uiManager.getMode() === AnnotationEditorType.HIGHLIGHT) {
         highlightedText = editor.text || "[Drawn Highlight]";
 
@@ -570,11 +570,15 @@ class AnnotationEditorLayer {
             y: coords.y,
             width: coords.width,
             height: coords.height,
-            id: editor.id,
+            id: id,
             color: editor.color || null,
+            guid: {
+              x: coords.x,
+              y: coords.y,
+              color: editor.color || null,
+            },
           }
         };
-        console.log(messageData);
         window.parent?.postMessage(messageData, '*');
       } else if (this.#uiManager.getMode() === AnnotationEditorType.FREETEXT) {
         const div = editor.div;
@@ -590,11 +594,15 @@ class AnnotationEditorLayer {
               y: coords.y,
               width: coords.width,
               height: coords.height,
-              id: editor.id,
+              id: id,
               color: editor.color || window.getComputedStyle(div).color || null,
+              guid: {
+                x: coords.x,
+                y: coords.y,
+                color: editor.color || window.getComputedStyle(div).color || null
+              },
             }
           };
-          console.log(messageData);
           window.parent?.postMessage(messageData, '*');
         });
       }
