@@ -878,9 +878,13 @@ See https://github.com/adobe-type-tools/cmap-resources
 
         if (event.data?.type === "update-file") {
           const vals = event.data.vals;
-          await PDFViewerApplication.addFreetextAnnotation(vals).then( async function(){
+          if(event.data?.withannotdoc){
+            await PDFViewerApplication.addFreetextAnnotation(vals).then( async function(){
+              await PDFViewerApplication.update();
+            })
+          }else{
             await PDFViewerApplication.update();
-          })
+          }
         }
 
         if (event.data?.type === "add-freetext-annotation") {

@@ -1345,7 +1345,7 @@ const PDFViewerApplication = {
       console.warn("PDF viewer not initialized yet. Cannot add annotation.");
       return;
     }
-console.log(this.pdfViewer.annotationEditorMode);
+
     this.pdfViewer.annotationEditorMode = {
       mode: AnnotationEditorType.NONE,
       editId: null,
@@ -1405,6 +1405,10 @@ console.log(this.pdfViewer.annotationEditorMode);
       editor.editorDiv.textContent = text;
       editor.editorDiv.style.fontSize = `${fontSize}px`;
       editor.editorDiv.style.color = color;
+      editor._isVisible = false;
+      editor.div.setAttribute("contenteditable", "false");
+      editor.div.style.pointerEvents = "none";
+      editor.id = 'documentation';
 
       // Append to DOM if needed
       if (!editor.parent && layerBuilder?.div && !editor.div.isConnected) {
@@ -1412,36 +1416,24 @@ console.log(this.pdfViewer.annotationEditorMode);
         editor.attachToDOM?.();
       }
 
-      // Mark as edited and finalize
-      const editorDiv = editor.editorDiv;
-      if (editorDiv) {
-        // Set visual content
-        editorDiv.textContent = text;
-        editorDiv.style.fontSize = `${fontSize}px`;
-        editorDiv.style.color = color;
-        editor.div.setAttribute("contenteditable", "false");
+      // Internal state updates
+      if ("_content" in editor) editor._content = text;
+      if ("content" in editor) editor.content = text;
 
-        // Internal state updates
-        if ("_content" in editor) editor._content = text;
-        if ("content" in editor) editor.content = text;
+      // Ensure it's tracked by annotation storage
+      editor._uiManager?.addToAnnotationStorage(editor);
 
-        // Ensure it's tracked by annotation storage
-        editor._uiManager?.addToAnnotationStorage(editor);
+      // Finalize edits
+      if (typeof editor.commit === "function") editor.commit();
 
-        // Finalize edits
-        if (typeof editor.commit === "function") editor.commit();
-
-        // Optional: visually deselect
-        editor.editorDiv.blur?.();
-      } else {
-        console.warn("❌ Cannot find the editable div inside the editor instance.");
-      }
+      // Optional: visually deselect
+      editor.editorDiv.blur?.();
 
       // Disable annotation mode AFTER commit
       setTimeout(() => {
         this.pdfViewer.annotationEditorMode = {
           mode: AnnotationEditorType.NONE,
-          editId: editorDiv.id,
+          editId: editor.editorDiv.id,
           isFromKeyboard: false,
         };
       }, 200);
@@ -2418,60 +2410,6 @@ console.log(this.pdfViewer.annotationEditorMode);
   get scriptingReady() {
     return this.pdfScriptingManager.ready;
   },
-  createProgrammaticAnnotation: async function({ documentid, scmid, anfnr }) {
-    // this function should create a layer when called and add documentid scmid and anfnr but it's soooo buggy
-    try {
-      const pageIndex = 0;
-      const content = `DocID: ${documentid}, SCMID: ${scmid}, ANFNR: ${anfnr}`;
-      const pageView = PDFViewerApplication.pdfViewer.getPageView(pageIndex);
-      if (!pageView) return console.error("❌ Page view not ready.");
-
-      const toolButton = document.getElementById("editorFreeTextButton");
-      if (!toolButton) return console.error("❌ FreeText tool button not found.");
-      toolButton.click();
-
-      // Allow PDF.js to enter FreeText mode
-      await new Promise(res => setTimeout(res, 50));
-
-      // Simulate click at PDF coords (0.01, 0.01) converted to viewport
-      const [clickX, clickY] = pageView.viewport.convertToViewportPoint(0.01, pageView.viewport.height - 0.01);
-
-      const annotationLayerDiv = pageView.div.querySelector(".annotationEditorLayer");
-      if (!annotationLayerDiv) return console.error("❌ No annotation layer.");
-
-      ["mousedown", "mouseup"].forEach(type => {
-        annotationLayerDiv.dispatchEvent(new MouseEvent(type, {
-          bubbles: true,
-          cancelable: true,
-          clientX: clickX,
-          clientY: clickY,
-          view: window,
-        }));
-      });
-
-      await new Promise(res => setTimeout(res, 100));
-
-      // Get the internal editor
-      const annotationLayer = pageView.annotationEditorLayer;
-      const editors = annotationLayer._editors;
-      if (!editors || editors.length === 0) return console.error("❌ No FreeText editor found.");
-
-      const editor = editors[editors.length - 1];
-
-      // Use official FreeTextEditor API methods (not DOM!)
-      editor.setText(content); // Sets internal #content and div text
-      editor.updateParams("freetextColor", "#ffffff");
-      editor.updateParams("freetextSize", 6);
-
-      editor.commitOrRemove(); // commit = save, remove = delete if empty
-
-      toolButton.click(); // turn off freetext mode
-
-      console.log("✅ Annotation added and saved near (0,0)");
-    } catch (err) {
-      console.error("❌ Error in createProgrammaticAnnotation:", err);
-    }
-  },
 };
 
 initCom(PDFViewerApplication);
@@ -2503,27 +2441,30 @@ initCom(PDFViewerApplication);
             typeof textContent === 'string' &&
             textContent.includes('{documentationId:')
           ) {
-            const match = textContent.match(/documentationId\s*:\s*"?(\d+)"?/);
-            if (match && match[1]) {
-              const documentationId = match[1];
-              console.log('[ANNOTATION FOUND]', documentationId);
-              window.parent.postMessage(
-                {
-                  type: 'custom-annotation-detected',
-                  payload: {
-                    documentationId,
-                    schid: 316,
+            const match = textContent.match(
+              /documentationId\s*:\s*"?(\d+)"?.*?anfnr\s*:\s*"?(\d+)"?.*?schmId\s*:\s*"?(\d+)"?/
+            );            if (match && match[1]) {
+              const documentationId = match[1] || null;
+              const anfnr = match[2] || null;
+              const schmId = match[3] || null;
+              if (documentationId && anfnr && schmId) {
+                window.parent.postMessage(
+                  {
+                    type: 'custom-annotation-detected',
+                    payload: {
+                      documentationId,
+                      anfnr,
+                      schmId,
+                    },
                   },
-                },
-                '*'
-              );
+                  '*'
+                );
+              }
               return;
             }
           }
         }
       }
-
-      console.log('[NO custom annotation found]');
       window.parent.postMessage({ type: 'custom-annotation-not-found' }, '*');
     } catch (e) {
       console.error('Annotation parsing failed:', e);
