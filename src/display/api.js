@@ -1011,8 +1011,8 @@ class PDFDocumentProxy {
    * @returns {Promise<Uint8Array>} A promise that is resolved with a
    *   {Uint8Array} containing the full data of the saved document.
    */
-  saveDocument() {
-    return this._transport.saveDocument();
+  saveDocument(annotationsMetadata = null) {
+    return this._transport.saveDocument(annotationsMetadata);
   }
 
   /**
@@ -2796,7 +2796,7 @@ class WorkerTransport {
     return this.messageHandler.sendWithPromise("GetData", null);
   }
 
-  saveDocument() {
+  saveDocument(annotationsMetadata = null) {
     if (this.annotationStorage.size <= 0) {
       warn(
         "saveDocument called while `annotationStorage` is empty, " +
@@ -2813,6 +2813,7 @@ class WorkerTransport {
           numPages: this._numPages,
           annotationStorage: map,
           filename: this._fullReader?.filename ?? null,
+          annotationsMetadata,
         },
         transfer
       )
