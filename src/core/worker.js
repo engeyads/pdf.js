@@ -508,7 +508,13 @@ class WorkerMessageHandler {
 
     handler.on(
       "SaveDocument",
-      async function ({ isPureXfa, numPages, annotationStorage, filename }) {
+      async function ({
+        isPureXfa,
+        numPages,
+        annotationStorage,
+        filename,
+        annotationsMetadata,
+      }) {
         const globalPromises = [
           pdfManager.requestLoadedStream(),
           pdfManager.ensureCatalog("acroForm"),
@@ -669,20 +675,45 @@ class WorkerMessageHandler {
         if (xref.trailer) {
           // Get string info from Info in order to compute fileId.
           const infoMap = new Map();
-          const xrefInfo = xref.trailer.get("Info") || null;
-          if (xrefInfo instanceof Dict) {
-            for (const [key, value] of xrefInfo) {
+          let infoRef = xref.trailer.getRaw("Info") || null;
+          let infoDict = xref.trailer.get("Info");
+          if (infoDict instanceof Dict) {
+            for (const [key, value] of infoDict) {
               if (typeof value === "string") {
                 infoMap.set(key, stringToPDFString(value));
               }
             }
+          } else {
+            infoDict = new Dict(xref);
+            if (infoRef === null) {
+              infoRef = xref.getNewTemporaryRef();
+            }
+          }
+
+          if (Array.isArray(annotationsMetadata)) {
+            const arr = [];
+            for (const item of annotationsMetadata) {
+              const d = new Dict(xref);
+              if (item.Guid !== undefined) {
+                d.set("Guid", JSON.stringify(item.Guid));
+              }
+              if (item.DocumentationId !== undefined) {
+                d.set("DocumentationId", item.DocumentationId);
+              }
+              if (item.DocumentationPositionId !== undefined) {
+                d.set("DocumentationPositionId", item.DocumentationPositionId);
+              }
+              arr.push(d);
+            }
+            infoDict.set("VDSPDFAnnotations", arr);
+            changes.put(infoRef, { data: infoDict });
           }
 
           newXrefInfo = {
             rootRef: catalogRef,
             encryptRef: xref.trailer.getRaw("Encrypt") || null,
             newRef: xref.getNewTemporaryRef(),
-            infoRef: xref.trailer.getRaw("Info") || null,
+            infoRef,
             infoMap,
             fileIds: xref.trailer.get("ID") || null,
             startXRef: linearization

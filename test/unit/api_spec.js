@@ -28,6 +28,7 @@ import {
   PermissionFlag,
   ResponseException,
   UnknownErrorException,
+  bytesToString,
 } from "../../src/shared/util.js";
 import {
   buildGetDocumentParams,
@@ -131,6 +132,7 @@ describe("api", function () {
 
       await loadingTask.destroy();
     });
+
 
     it("creates pdf doc from URL-object", async function () {
       const urlObj = TestPdfsServer.resolveURL(basicApiFileName);
@@ -3123,6 +3125,25 @@ describe("api", function () {
       expect(field.textContent).toEqual(["Several", "", "Other", "Jobs"]);
 
       await loadingTask.destroy();
+    });
+
+    it("adds VDSPDFAnnotations metadata when saving", async function () {
+      const loadingTask = getDocument(buildGetDocumentParams("empty.pdf"));
+      const pdfDoc = await loadingTask.promise;
+
+      const meta = [
+        {
+          Guid: { x: 123, y: 123, color: "abc123", page: 1 },
+          DocumentationId: 1,
+          DocumentationPositionId: 2,
+        },
+      ];
+
+      const data = await pdfDoc.saveDocument(meta);
+      await loadingTask.destroy();
+
+      expect(bytesToString(new Uint8Array(data)).includes("/VDSPDFAnnotations"))
+        .toEqual(true);
     });
 
     describe("Cross-origin", function () {
