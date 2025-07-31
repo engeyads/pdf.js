@@ -457,6 +457,7 @@ async function incrementalUpdate({
       d.set("Guid", stringToPDFString(JSON.stringify(ann.Guid)));
       d.set("DocumentationId", ann.DocumentationId);
       d.set("DocumentationPositionId", ann.DocumentationPositionId);
+      d.set("SchemaId", ann.SchemaId);
       return d;
     });
     newInfoDict.set("VDSPDFAnnotations", annArray);

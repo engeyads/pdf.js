@@ -1484,13 +1484,14 @@ const PDFViewerApplication = window.PDFViewerApplication = {
     }, 100);
   },
   async addHighlightWithVDSPDFAnnotation({
-                                           page,
-                                           quadPoints,
-                                           color = '#FF0000',
-                                           guid,
-                                           documentationId,
-                                           documentationPositionId
-                                         }) {
+     page,
+     quadPoints,
+     color = '#FF0000',
+     guid,
+     documentationId,
+     documentationPositionId,
+     schemaId
+   }) {
     if (!this.pdfViewer) {
       console.warn("PDF viewer not ready");
       return;
@@ -1526,7 +1527,8 @@ const PDFViewerApplication = window.PDFViewerApplication = {
         {
           Guid: guid,
           DocumentationId: documentationId,
-          DocumentationPositionId: documentationPositionId
+          DocumentationPositionId: documentationPositionId,
+          SchemaId: schemaId
         }
       ]
     });
@@ -1536,7 +1538,8 @@ const PDFViewerApplication = window.PDFViewerApplication = {
       {
         Guid: guid,
         DocumentationId: documentationId,
-        DocumentationPositionId: documentationPositionId
+        DocumentationPositionId: documentationPositionId,
+        SchemaId: schemaId
       }
     ];
     this._customAnnotations.push(highlightAnnotation);

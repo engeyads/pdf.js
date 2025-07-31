@@ -4830,6 +4830,7 @@ class UnderlineAnnotation extends MarkupAnnotation {
             Guid: obj.get("Guid")?.value || "",
             DocumentationId: obj.get("DocumentationId")?.value || "",
             DocumentationPositionId: obj.get("DocumentationPositionId")?.value || "",
+            SchemaId: obj.get("SchemaId")?.value || "",
           });
         }
       }
