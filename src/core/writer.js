@@ -12,7 +12,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
+import { stringToPDFString } from "../shared/util.js";
 import { bytesToString, info, warn } from "../shared/util.js";
 import { Dict, isName, Name, Ref } from "./primitives.js";
 import {
@@ -416,6 +416,7 @@ async function incrementalUpdate({
   originalData,
   xrefInfo,
   changes,
+  annotationsData = [],
   xref = null,
   hasXfa = false,
   xfaDatasetsRef = null,
@@ -437,6 +438,34 @@ async function incrementalUpdate({
     changes,
   });
 
+  // —— Merge in our custom VDSPDFAnnotations entry ——
+  if (annotationsData.length > 0 && xrefInfo.infoRef) {
+    const infoRef = xrefInfo.infoRef || xref.getNewTemporaryRef();
+    const originalInfoDict = xrefInfo.infoRef
+      ? await xref.fetchAsync(xrefInfo.infoRef)
+      : new Dict(xref);
+
+// Clone or start fresh
+    const newInfoDict = new Dict(xref);
+    for (const key of originalInfoDict.getKeys()) {
+      newInfoDict.set(key, originalInfoDict.getRaw(key));
+    }
+
+// Build your array
+    const annArray = annotationsData.map(ann => {
+      const d = new Dict(xref);
+      d.set("Guid", stringToPDFString(JSON.stringify(ann.Guid)));
+      d.set("DocumentationId", ann.DocumentationId);
+      d.set("DocumentationPositionId", ann.DocumentationPositionId);
+      return d;
+    });
+    newInfoDict.set("VDSPDFAnnotations", annArray);
+
+// Schedule it (always)
+    changes.put(infoRef, {data: newInfoDict});
+// And ensure the trailer knows about our new Info dict:
+    xrefInfo.infoRef = infoRef;
+  }
   if (hasXfa) {
     updateXFA({
       xfaData,

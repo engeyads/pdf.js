@@ -4647,7 +4647,31 @@ class HighlightAnnotation extends MarkupAnnotation {
     super(params);
 
     const { dict, xref } = params;
+
+    try {
+      if (this.contents && typeof this.contents === "string") {
+        const parsed = JSON.parse(this.contents);
+        if (parsed?.VDSPDFAnnotations) {
+          this.data.VDSPDFAnnotations = parsed.VDSPDFAnnotations;
+        }
+      }
+    } catch (e) {
+      console.warn("VDSPDFAnnotations parse failed:", e);
+    }
+
     this.data.annotationType = AnnotationType.HIGHLIGHT;
+
+    // ⬇️ Resolve /VDSPDFAnnotations properly
+    const vdspdfArray = new ArrayObject();
+    vdspdfArray.push(
+      Dict.merge(xref, {
+        Guid: String("guid-1"),
+        DocumentationId: String("doc-001"),
+        DocumentationPositionId: String("pos-001"),
+      })
+    );
+    highlight.set("VDSPDFAnnotations", vdspdfArray);
+
     this.data.isEditable = !this.data.noHTML;
     // We want to be able to add mouse listeners to the annotation.
     this.data.noHTML = false;
@@ -4784,6 +4808,33 @@ class UnderlineAnnotation extends MarkupAnnotation {
     super(params);
 
     const { dict, xref } = params;
+
+    // 👇 Extract VDSPDFAnnotations array (custom key)
+    const vdspdfAnnots = dict.get("VDSPDFAnnotations");
+    this.data.VDSPDFAnnotations = [];
+
+    if (Array.isArray(vdspdfAnnots)) {
+      for (const ref of vdspdfAnnots) {
+        let obj = ref;
+        if (xref && ref?.num !== undefined) {
+          try {
+            obj = xref.fetchIfRef(ref);
+          } catch (e) {
+            console.warn("Failed to resolve VDSPDFAnnotation ref:", e);
+            continue;
+          }
+        }
+
+        if (obj?.get) {
+          this.data.VDSPDFAnnotations.push({
+            Guid: obj.get("Guid")?.value || "",
+            DocumentationId: obj.get("DocumentationId")?.value || "",
+            DocumentationPositionId: obj.get("DocumentationPositionId")?.value || "",
+          });
+        }
+      }
+    }
+
     this.data.annotationType = AnnotationType.UNDERLINE;
 
     const quadPoints = (this.data.quadPoints = getQuadPoints(dict, null));

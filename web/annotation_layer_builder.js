@@ -149,8 +149,13 @@ class AnnotationLayerBuilder {
       if (this._cancelled || !this.annotationLayer) {
         return;
       }
-      // If an annotationLayer already exists, refresh its children's
-      // transformation matrices.
+
+      // 🔐 Fix: Ensure viewport is defined before cloning
+      if (!viewport) {
+        console.warn("❌ No viewport provided to AnnotationLayerBuilder.render");
+        return;
+      }
+
       this.annotationLayer.update({
         viewport: viewport.clone({ dontFlip: true }),
       });

@@ -508,7 +508,14 @@ class WorkerMessageHandler {
 
     handler.on(
       "SaveDocument",
-      async function ({ isPureXfa, numPages, annotationStorage, filename }) {
+      async function ({
+             isPureXfa,
+             numPages,
+             annotationStorage,
+             filename,
+             annotationsData = [],
+           }) {
+        console.log("Worker got annotationsData:", annotationsData);
         const globalPromises = [
           pdfManager.requestLoadedStream(),
           pdfManager.ensureCatalog("acroForm"),
@@ -706,6 +713,7 @@ class WorkerMessageHandler {
           xfaData,
           // Use the same kind of XRef as the previous one.
           useXrefStream: isDict(xref.topDict, "XRef"),
+          annotationsData,
         }).finally(() => {
           xref.resetNewTemporaryRef();
         });

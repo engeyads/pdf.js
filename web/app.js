@@ -104,12 +104,46 @@ const ViewOnLoad = {
   INITIAL: 1,
 };
 
-const PDFViewerApplication = {
+class MyPDFApp {
+  constructor() {
+    this._customAnnotations = [];
+  }
+
+  async addHighlightWithVDSPDFAnnotation(opts) {
+    // … build highlightAnnotation as before …
+    highlightAnnotation.contents = JSON.stringify({ VDSPDFAnnotations: [/*…*/] });
+    highlightAnnotation.VDSPDFAnnotations = [ /* same array */ ];
+
+    // store it in your own list
+    this._customAnnotations.push(highlightAnnotation);
+
+    // you can still render it via PDF.js
+    this.pdfDocument.annotationStorage.setValue(annotationId, highlightAnnotation);
+    const pageView = this.pdfViewer.getPageView(opts.page-1);
+    pageView.annotationLayer?.render(this.pdfDocument, true);
+  }
+
+  async saveWithCustomAnnotations() {
+    // pull from your list, not annotationStorage._storage
+    const vdsAnnotations = this._customAnnotations
+      .flatMap(ann => ann.VDSPDFAnnotations || []);
+
+    console.log("📝 VDSPDFAnnotations to embed:", vdsAnnotations);
+    const data = await this.pdfDocument.saveDocument({
+      annotationsData: vdsAnnotations
+    });
+    // … download blob …
+  }
+}
+
+const PDFViewerApplication = window.PDFViewerApplication = {
   initialBookmark: document.location.hash.substring(1),
   _initializedCapability: {
     ...Promise.withResolvers(),
     settled: false,
   },
+  /** @type {Array<Object>}  Holds every highlightAnnotation we create */
+  _customAnnotations: [],
   appConfig: null,
   /** @type {PDFDocumentProxy} */
   pdfDocument: null,
@@ -1206,7 +1240,12 @@ const PDFViewerApplication = {
     await this.pdfScriptingManager.dispatchWillSave();
 
     try {
-      const data = await this.pdfDocument.saveDocument();
+      // Flatten out every VDSPDFAnnotations entry we recorded
+      const all = this._customAnnotations.flatMap(
+        ann => ann.VDSPDFAnnotations || []
+      );
+      console.log("VDSPDFAnnotations to embed:", all);
+      const data = await this.pdfDocument.saveDocument({ annotationsData: all });
       this.downloadManager.download(data, this._downloadUrl, this._docFilename);
     } catch (reason) {
       // When the PDF document isn't ready, fallback to a "regular" download.
@@ -1236,7 +1275,12 @@ const PDFViewerApplication = {
     await this.pdfScriptingManager.dispatchWillSave();
 
     try {
-      const data = await this.pdfDocument.saveDocument();
+      // Flatten out every VDSPDFAnnotations entry we recorded
+      const all = this._customAnnotations.flatMap(
+        ann => ann.VDSPDFAnnotations || []
+      );
+      console.log("VDSPDFAnnotations to embed:", all);
+      const data = await this.pdfDocument.saveDocument({ annotationsData: all });
       // this.downloadManager.download(data, this._downloadUrl, this._docFilename);
       const blob = new Blob([new Uint8Array(data)], {type: 'application/pdf'});
 
@@ -1438,6 +1482,116 @@ const PDFViewerApplication = {
         };
       }, 200);
     }, 100);
+  },
+  async addHighlightWithVDSPDFAnnotation({
+                                           page,
+                                           quadPoints,
+                                           color = '#FF0000',
+                                           guid,
+                                           documentationId,
+                                           documentationPositionId
+                                         }) {
+    if (!this.pdfViewer) {
+      console.warn("PDF viewer not ready");
+      return;
+    }
+
+    const pageView = this.pdfViewer.getPageView(page - 1);
+    if (!pageView) {
+      console.warn("Page view not available");
+      return;
+    }
+
+    await pageView.draw(); // Ensure page is rendered
+
+    const annotationStorage = this.pdfDocument?.annotationStorage;
+    if (!annotationStorage) {
+      console.error("Annotation storage unavailable");
+      return;
+    }
+
+    const annotationId = `hl-${page}-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+
+    const highlightAnnotation = {
+      id: annotationId,
+      annotationType: 9,
+      color: this._parseColor?.(color),
+      quadPoints,
+      rect: this._computeRectFromQuadPoints?.(quadPoints),
+      pageIndex: page - 1,
+    };
+
+    highlightAnnotation.contents = JSON.stringify({
+      VDSPDFAnnotations: [
+        {
+          Guid: guid,
+          DocumentationId: documentationId,
+          DocumentationPositionId: documentationPositionId
+        }
+      ]
+    });
+
+    // ===> ALSO attach it so save() can see it:
+    highlightAnnotation.VDSPDFAnnotations = [
+      {
+        Guid: guid,
+        DocumentationId: documentationId,
+        DocumentationPositionId: documentationPositionId
+      }
+    ];
+    this._customAnnotations.push(highlightAnnotation);
+    console.log(highlightAnnotation);
+// Now set into storage
+
+    annotationStorage.setValue(annotationId, highlightAnnotation);
+    this.pdfDocument.annotationStorage.setValue(highlightAnnotation.id, highlightAnnotation);
+
+    pageView.annotationLayer?.render(this.pdfDocument, true);
+
+    console.log(`✅ Highlight annotation with VDSPDFAnnotations embedded as contents added on page ${page}`);
+  },
+  _parseColor(hex) {
+    const int = parseInt(hex.replace('#', ''), 16);
+    return [
+      ((int >> 16) & 255) / 255,
+      ((int >> 8) & 255) / 255,
+      (int & 255) / 255
+    ];
+  },
+  _computeRectFromQuadPoints(quadPoints) {
+    const xs = [quadPoints[0], quadPoints[2], quadPoints[4], quadPoints[6]];
+    const ys = [quadPoints[1], quadPoints[3], quadPoints[5], quadPoints[7]];
+    const xMin = Math.min(...xs);
+    const xMax = Math.max(...xs);
+    const yMin = Math.min(...ys);
+    const yMax = Math.max(...ys);
+    return [xMin, yMin, xMax, yMax];
+  },
+  async saveWithCustomAnnotations() {
+    try {
+      const annotationStorage = this.pdfDocument?.annotationStorage;
+      if (!annotationStorage) {
+        throw new Error("No annotation storage found");
+      }
+
+      // ===> FLATTEN your recorded annotations
+      const vdsAnnotations = this._customAnnotations.flatMap(
+        ann => ann.VDSPDFAnnotations || []
+      );
+      console.log("📝 VDSPDFAnnotations to embed:", vdsAnnotations);
+
+      // Pass *that* array into saveDocument
+      const data = await this.pdfDocument.saveDocument({
+        annotationsData: vdsAnnotations
+      });
+
+      // Then download as before
+      this.downloadManager.download(data, this._downloadUrl, this._docFilename);
+    } catch (e) {
+      console.error("Error saving with custom annotations:", e);
+    } finally {
+      this._saveInProgress = false;
+    }
   },
   load(pdfDocument) {
     this.pdfDocument = pdfDocument;

@@ -1008,11 +1008,40 @@ class PDFDocumentProxy {
   }
 
   /**
-   * @returns {Promise<Uint8Array>} A promise that is resolved with a
-   *   {Uint8Array} containing the full data of the saved document.
+   * Save the document, optionally embedding custom annotation metadata.
+   *
+   * @param {{ annotationsData?: Array<Object> }} [options]
+   * @returns {Promise<Uint8Array>} A promise resolved with the saved document data.
    */
-  saveDocument() {
-    return this._transport.saveDocument();
+  saveDocument({ annotationsData = [] } = {}) {
+    // 1) Turn the in-memory storage into a transferable Map
+    const { map: annotationStorage, transfer } = this.annotationStorage.serializable;
+
+    // 2) Warn if there's literally nothing to save
+    if (annotationStorage.size === 0 && annotationsData.length === 0) {
+      warn(
+        "saveDocument called with no annotationStorage and no annotationsData; " +
+        "did you mean to use getData-method instead?"
+      );
+    }
+
+    // 3) Send *both* your storage and your custom array to the worker
+    return this._transport
+      .saveDocument(
+        {
+          annotationStorage,
+          annotationsData,
+          isPureXfa: !!this._htmlForXfa,
+          numPages:   this._numPages,
+          filename:   this._fullReader?.filename ?? null,
+        },
+        transfer
+      )
+      .then(data => {
+        // 4) Reset the “dirty” flag so future saves are incremental
+        this.annotationStorage.resetModified();
+        return data;
+      });
   }
 
   /**
@@ -2796,26 +2825,32 @@ class WorkerTransport {
     return this.messageHandler.sendWithPromise("GetData", null);
   }
 
-  saveDocument() {
-    if (this.annotationStorage.size <= 0) {
-      warn(
-        "saveDocument called while `annotationStorage` is empty, " +
-          "please use the getData-method instead."
-      );
-    }
-    const { map, transfer } = this.annotationStorage.serializable;
+  /**
+   * @param {{ annotationsData?: Array<Object> }} [params]
+   * @param {Transferable[]} [transfer]
+   * @returns {Promise<Uint8Array>}
+   */
+  saveDocument(params = {}, transfer) {
+    const { map, transfer: defaultTransfer } = this.annotationStorage.serializable;
+    const usedTransfer = transfer ?? defaultTransfer;
 
+    // Warn if nothing at all to save
+    if (map.size === 0 && (!params.annotationsData || !params.annotationsData.length)) {
+      warn("saveDocument called with no annotationStorage and no annotationsData");
+    }
+
+    // Build the payload, now passing your custom annotationsData
+    const messageParams = {
+      annotationStorage: map,
+      annotationsData: params.annotationsData || [],
+      isPureXfa: !!this._htmlForXfa,
+      numPages: this._numPages,
+      filename: this._fullReader?.filename ?? null,
+    };
+
+    // Send everything to the worker
     return this.messageHandler
-      .sendWithPromise(
-        "SaveDocument",
-        {
-          isPureXfa: !!this._htmlForXfa,
-          numPages: this._numPages,
-          annotationStorage: map,
-          filename: this._fullReader?.filename ?? null,
-        },
-        transfer
-      )
+      .sendWithPromise("SaveDocument", messageParams, usedTransfer)
       .finally(() => {
         this.annotationStorage.resetModified();
       });

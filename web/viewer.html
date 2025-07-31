@@ -336,6 +336,10 @@ See https://github.com/adobe-type-tools/cmap-resources
                 <div id="editorModeSeparator" class="verticalToolbarSeparator"></div>
 
                 <div class="toolbarHorizontalGroup hiddenMediumView">
+                  <button id="customSaveAnnotations" class="toolbarButton" type="button" tabindex="0" title="Save with Annotations">
+                    <span>Save+Annot</span>
+                  </button>
+
                   <button id="printButton" class="toolbarButton" type="button" tabindex="0" data-l10n-id="pdfjs-print-button">
                     <span data-l10n-id="pdfjs-print-button-label"></span>
                   </button>
@@ -362,6 +366,10 @@ See https://github.com/adobe-type-tools/cmap-resources
                       <div class="visibleMediumView">
                         <button id="secondaryPrint" class="toolbarButton labeled" type="button" tabindex="0" data-l10n-id="pdfjs-print-button">
                           <span data-l10n-id="pdfjs-print-button-label"></span>
+                        </button>
+
+                        <button id="saveWithAnnotation" class="toolbarButton labeled" type="button" tabindex="0">
+                          <span>Save with Annotations</span>
                         </button>
 
                         <button id="secondaryDownload" class="toolbarButton labeled" type="button" tabindex="0" data-l10n-id="pdfjs-save-button">
@@ -625,6 +633,9 @@ See https://github.com/adobe-type-tools/cmap-resources
             <div id="newAltTextButtons" class="dialogButtonsGroup">
               <button id="newAltTextCancel" type="button" class="secondaryButton hidden" tabindex="0"><span data-l10n-id="pdfjs-editor-alt-text-cancel-button"></span></button>
               <button id="newAltTextNotNow" type="button" class="secondaryButton" tabindex="0"><span data-l10n-id="pdfjs-editor-new-alt-text-not-now-button"></span></button>
+              <button id="saveWithAnnotations" type="button" class="primaryButton" tabindex="0">
+                <span>Save with Annotations</span>
+              </button>
               <button id="newAltTextSave" type="button" class="primaryButton" tabindex="0"><span data-l10n-id="pdfjs-editor-alt-text-save-button"></span></button>
             </div>
           </div>
@@ -876,6 +887,10 @@ See https://github.com/adobe-type-tools/cmap-resources
           return;
         }
 
+        if (event.data?.type === "addHighlightWithVDSPDFAnnotation") {
+          await PDFViewerApplication.addHighlightWithVDSPDFAnnotation(event.data);
+        }
+
         if (event.data?.type === "update-file") {
           const vals = event.data.vals;
           if(event.data?.withannotdoc){
@@ -1008,6 +1023,30 @@ See https://github.com/adobe-type-tools/cmap-resources
           }, 300);
         }
 
+      });
+
+      document.getElementById('customSaveAnnotations')?.addEventListener('click', async () => {
+        if (window.PDFViewerApplication?.saveWithCustomAnnotations) {
+          await PDFViewerApplication.saveWithCustomAnnotations();
+        } else {
+          alert("saveWithCustomAnnotations function is not available.");
+        }
+      });
+
+      document.getElementById('saveWithAnnotations')?.addEventListener('click', async () => {
+        if (window.PDFViewerApplication?.saveWithCustomAnnotations) {
+          await PDFViewerApplication.saveWithCustomAnnotations();
+        } else {
+          alert("Custom annotation save function is not available.");
+        }
+      });
+
+      document.getElementById('saveWithAnnotation')?.addEventListener('click', async () => {
+        if (window.PDFViewerApplication?.saveWithCustomAnnotations) {
+          await PDFViewerApplication.saveWithCustomAnnotations();
+        } else {
+          alert("Custom annotation save function is not available.");
+        }
       });
 
       document.addEventListener('mousedown', function (e) {
