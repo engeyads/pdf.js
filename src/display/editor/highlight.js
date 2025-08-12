@@ -72,6 +72,8 @@ class HighlightEditor extends AnnotationEditor {
 
   #thickness;
 
+  vdsPDFAnnotations = {};
+
   #methodOfCreation = "";
 
   static _defaultColor = null;
@@ -115,6 +117,12 @@ class HighlightEditor extends AnnotationEditor {
     this._isDraggable = false;
     this.defaultL10nId = "pdfjs-editor-highlight-editor";
 
+    this.vdsPDFAnnotations = Array.isArray(params.VDSPDFAnnotations) ? params.VDSPDFAnnotations : undefined;
+
+    if (params.vdsData) {
+      this.vdsPDFAnnotations = this.normalizeVDSAnnotations(params.vdsData);
+    }
+
     if (params.highlightId > -1) {
       this.#isFreeHighlight = true;
       this.#createFreeOutlines(params);
@@ -130,9 +138,50 @@ class HighlightEditor extends AnnotationEditor {
     }
   }
 
+  // Enhanced VDS annotations setter
+  setVDSPDFAnnotations(annotations) {
+    this.vdsPDFAnnotations = this.normalizeVDSAnnotations(annotations || {});
+  }
+
+// Enhanced VDS annotations getter
+  getVDSPDFAnnotations() {
+    return this.vdsPDFAnnotations;
+  }
+
   getText() {
     return this.#text || null;
   }
+
+  normalizeVDSAnnotations(vdsData) {
+    if (!vdsData || typeof vdsData !== 'object') return {};
+
+    const normalized = { ...vdsData };
+
+    // Ensure these fields are integers
+    if (normalized.documentationId !== undefined) {
+      normalized.documentationId = parseInt(normalized.documentationId, 10) || 0;
+    }
+    if (normalized.documentationPositionId !== undefined) {
+      normalized.documentationPositionId = parseInt(normalized.documentationPositionId, 10) || 0;
+    }
+    if (normalized.schemaId !== undefined) {
+      normalized.schemaId = parseInt(normalized.schemaId, 10) || 0;
+    }
+
+    // Handle guid object
+    if (normalized.guid && typeof normalized.guid === 'object') {
+      normalized.guid = {
+        x: parseFloat(normalized.guid.x) || 0,
+        y: parseFloat(normalized.guid.y) || 0,
+        color: normalized.guid.color || '#FF0000',
+        page: parseInt(normalized.guid.page, 10) || 1,
+        timestamp: normalized.guid.timestamp || Date.now()
+      };
+    }
+
+    return normalized;
+  }
+
   /** @inheritdoc */
   get telemetryInitialData() {
     return {
@@ -869,7 +918,7 @@ class HighlightEditor extends AnnotationEditor {
     let initialData = null;
     if (data instanceof HighlightAnnotationElement) {
       const {
-        data: { quadPoints, rect, rotation, id, color, opacity, popupRef },
+        data: { quadPoints, rect, rotation, id, color, opacity, popupRef, VDSPDFAnnotations },
         parent: {
           page: { pageNumber },
         },
@@ -886,6 +935,7 @@ class HighlightEditor extends AnnotationEditor {
         id,
         deleted: false,
         popupRef,
+        VDSPDFAnnotations,
       };
     } else if (data instanceof InkAnnotationElement) {
       const {
@@ -897,6 +947,7 @@ class HighlightEditor extends AnnotationEditor {
           color,
           borderStyle: { rawWidth: thickness },
           popupRef,
+          VDSPDFAnnotations,
         },
         parent: {
           page: { pageNumber },
@@ -915,11 +966,16 @@ class HighlightEditor extends AnnotationEditor {
         id,
         deleted: false,
         popupRef,
+        VDSPDFAnnotations,
       };
     }
 
     const { color, quadPoints, inkLists, opacity } = data;
     const editor = await super.deserialize(data, parent, uiManager);
+
+    if (initialData?.VDSPDFAnnotations) {
+      editor.VDSPDFAnnotations = initialData.VDSPDFAnnotations;
+    }
 
     editor.color = Util.makeHexColor(...color);
     editor.#opacity = opacity || 1;
@@ -1023,6 +1079,10 @@ class HighlightEditor extends AnnotationEditor {
       rotation: this.#getRotation(),
       structTreeParentId: this._structTreeParentId,
     };
+
+    if (Array.isArray(this.VDSPDFAnnotations) && this.VDSPDFAnnotations.length) {
+      serialized.VDSPDFAnnotations = this.VDSPDFAnnotations;
+    }
 
     if (this.annotationElementId && !this.#hasElementChanged(serialized)) {
       return null;

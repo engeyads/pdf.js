@@ -887,8 +887,12 @@ See https://github.com/adobe-type-tools/cmap-resources
           return;
         }
 
-        if (event.data?.type === "addHighlightWithVDSPDFAnnotation") {
-          await PDFViewerApplication.addHighlightWithVDSPDFAnnotation(event.data);
+        if (event.data?.type === "updateLastHighlightAnnotation") {
+          await PDFViewerApplication.updateLastHighlightAnnotation({
+            page: event.data.page,
+            annotationId: event.data.annotationId,
+            newVDSPDFAnnotations: event.data.newVDSPDFAnnotations
+          });
         }
 
         if (event.data?.type === "update-file") {
@@ -1026,26 +1030,32 @@ See https://github.com/adobe-type-tools/cmap-resources
       });
 
       document.getElementById('customSaveAnnotations')?.addEventListener('click', async () => {
-        if (window.PDFViewerApplication?.saveWithCustomAnnotations) {
-          await PDFViewerApplication.saveWithCustomAnnotations();
-        } else {
-          alert("saveWithCustomAnnotations function is not available.");
+        try {
+          if (window.PDFViewerApplication?.saveWithCustomAnnotations) {
+            console.log('💾 Saving PDF with VDS annotations...');
+            await PDFViewerApplication.saveWithCustomAnnotations();
+          } else {
+            console.error('❌ saveWithCustomAnnotations function is not available');
+            alert("VDS annotation save function is not available.");
+          }
+        } catch (error) {
+          console.error('❌ Error saving with VDS annotations:', error);
+          alert("Error saving PDF with annotations: " + error.message);
         }
       });
 
       document.getElementById('saveWithAnnotations')?.addEventListener('click', async () => {
-        if (window.PDFViewerApplication?.saveWithCustomAnnotations) {
-          await PDFViewerApplication.saveWithCustomAnnotations();
-        } else {
-          alert("Custom annotation save function is not available.");
-        }
-      });
-
-      document.getElementById('saveWithAnnotation')?.addEventListener('click', async () => {
-        if (window.PDFViewerApplication?.saveWithCustomAnnotations) {
-          await PDFViewerApplication.saveWithCustomAnnotations();
-        } else {
-          alert("Custom annotation save function is not available.");
+        try {
+          if (window.PDFViewerApplication?.saveWithCustomAnnotations) {
+            console.log('💾 Saving PDF with VDS annotations...');
+            await PDFViewerApplication.saveWithCustomAnnotations();
+          } else {
+            console.error('❌ saveWithCustomAnnotations function is not available');
+            alert("VDS annotation save function is not available.");
+          }
+        } catch (error) {
+          console.error('❌ Error saving with VDS annotations:', error);
+          alert("Error saving PDF with annotations: " + error.message);
         }
       });
 

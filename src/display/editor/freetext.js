@@ -46,6 +46,8 @@ class FreeTextEditor extends AnnotationEditor {
 
   #fontSize;
 
+  vdsPDFAnnotations = {};
+
   static _freeTextDefaultContent = "";
 
   static _internalPadding = 0;
@@ -128,11 +130,56 @@ class FreeTextEditor extends AnnotationEditor {
 
   constructor(params) {
     super({ ...params, name: "freeTextEditor" });
+
+    this.vdsPDFAnnotations = Array.isArray(params.VDSPDFAnnotations) ? params.VDSPDFAnnotations : undefined;
+
+    if (params.vdsData) {
+      this.vdsPDFAnnotations = this.normalizeVDSAnnotations(params.vdsData);
+    }
+
     this.#color =
       params.color ||
       FreeTextEditor._defaultColor ||
       AnnotationEditor._defaultLineColor;
     this.#fontSize = params.fontSize || FreeTextEditor._defaultFontSize;
+  }
+
+  setVDSPDFAnnotations(annotations) {
+    this.vdsPDFAnnotations = this.normalizeVDSAnnotations(annotations || {});
+  }
+
+  getVDSPDFAnnotations() {
+    return this.vdsPDFAnnotations;
+  }
+
+  normalizeVDSAnnotations(vdsData) {
+    if (!vdsData || typeof vdsData !== 'object') return {};
+
+    const normalized = { ...vdsData };
+
+    // Ensure these fields are integers
+    if (normalized.documentationId !== undefined) {
+      normalized.documentationId = parseInt(normalized.documentationId, 10) || 0;
+    }
+    if (normalized.documentationPositionId !== undefined) {
+      normalized.documentationPositionId = parseInt(normalized.documentationPositionId, 10) || 0;
+    }
+    if (normalized.schemaId !== undefined) {
+      normalized.schemaId = parseInt(normalized.schemaId, 10) || 0;
+    }
+
+    // Handle guid object
+    if (normalized.guid && typeof normalized.guid === 'object') {
+      normalized.guid = {
+        x: parseFloat(normalized.guid.x) || 0,
+        y: parseFloat(normalized.guid.y) || 0,
+        color: normalized.guid.color || '#FF0000',
+        page: parseInt(normalized.guid.page, 10) || 1,
+        timestamp: normalized.guid.timestamp || Date.now()
+      };
+    }
+
+    return normalized;
   }
 
   /** @inheritdoc */
@@ -766,6 +813,7 @@ class FreeTextEditor extends AnnotationEditor {
           rotation,
           id,
           popupRef,
+          VDSPDFAnnotations,
         },
         textContent,
         textPosition,
@@ -792,9 +840,15 @@ class FreeTextEditor extends AnnotationEditor {
         id,
         deleted: false,
         popupRef,
+        VDSPDFAnnotations,
       };
     }
+
+
     const editor = await super.deserialize(data, parent, uiManager);
+    if (initialData?.VDSPDFAnnotations) {
+      editor.VDSPDFAnnotations = initialData.VDSPDFAnnotations;
+    }
     editor.#fontSize = data.fontSize;
     editor.#color = Util.makeHexColor(...data.color);
     editor.#content = this.content = FreeTextEditor.#deserializeContent(data.value);
@@ -833,6 +887,10 @@ class FreeTextEditor extends AnnotationEditor {
       rotation: this.rotation,
       structTreeParentId: this._structTreeParentId,
     };
+
+    if (Array.isArray(this.VDSPDFAnnotations) && this.VDSPDFAnnotations.length) {
+      serialized.VDSPDFAnnotations = this.VDSPDFAnnotations;
+    }
 
     if (isForCopying) {
       // Don't add the id when copying because the pasted editor mustn't be

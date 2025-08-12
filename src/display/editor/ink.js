@@ -25,6 +25,7 @@ import { AnnotationEditor } from "./editor.js";
 import { InkAnnotationElement } from "../annotation_layer.js";
 
 class InkDrawingOptions extends DrawingOptions {
+  vdsPDFAnnotations = {};
   constructor(viewerParameters) {
     super();
     this._viewParameters = viewerParameters;
@@ -149,6 +150,7 @@ class InkEditor extends DrawingEditor {
           opacity,
           borderStyle: { rawWidth: thickness },
           popupRef,
+          VDSPDFAnnotations,
         },
         parent: {
           page: { pageNumber },
@@ -167,10 +169,16 @@ class InkEditor extends DrawingEditor {
         id,
         deleted: false,
         popupRef,
+        VDSPDFAnnotations,
       };
     }
 
     const editor = await super.deserialize(data, parent, uiManager);
+
+    if (initialData?.VDSPDFAnnotations) {
+      editor.VDSPDFAnnotations = initialData.VDSPDFAnnotations;
+    }
+
     editor.annotationElementId = data.id || null;
     editor._initialData = initialData;
 
@@ -245,6 +253,10 @@ class InkEditor extends DrawingEditor {
       rotation: this.rotation,
       structTreeParentId: this._structTreeParentId,
     };
+
+    if (Array.isArray(this.VDSPDFAnnotations) && this.VDSPDFAnnotations.length) {
+      serialized.VDSPDFAnnotations = this.VDSPDFAnnotations;
+    }
 
     if (isForCopying) {
       serialized.isCopy = true;

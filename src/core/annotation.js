@@ -61,7 +61,15 @@ import {
   parseAppearanceStream,
   parseDefaultAppearance,
 } from "./default_appearance.js";
-import { Dict, isName, isRefsEqual, Name, Ref, RefSet } from "./primitives.js";
+import {
+  Dict,
+  isName,
+  isRefsEqual,
+  Name,
+  Ref as PDFString,
+  Ref,
+  RefSet
+} from "./primitives.js";
 import { Stream, StringStream } from "./stream.js";
 import { BaseStream } from "./base_stream.js";
 import { bidi } from "./bidi.js";
@@ -3905,6 +3913,48 @@ class FreeTextAnnotation extends MarkupAnnotation {
         );
         this.data.textPosition = this._transformPoint(coords, bbox, matrix);
       }
+
+      // ✅ Resolve /VDSPDFAnnotations from PDF dict
+      this.data.VDSPDFAnnotations = [];
+      const vdsArr = dict.get("VDSPDFAnnotations");
+      if (Array.isArray(vdsArr)) {
+        for (const itemRef of vdsArr) {
+          const item = xref.fetchIfRef(itemRef);
+          if (!(item instanceof Dict)) continue;
+
+          // Parse Guid(s)
+          const guidRaw = item.get("Guid");
+          const guidList = [];
+
+          if (Array.isArray(guidRaw)) {
+            for (const gRef of guidRaw) {
+              const g = xref.fetchIfRef(gRef);
+              if (!(g instanceof Dict)) continue;
+              guidList.push({
+                x: +g.get("x") || 0,
+                y: +g.get("y") || 0,
+                page: parseInt(g.get("page") || 1, 10),
+                color: g.has("color") ? g.get("color") : null,
+              });
+            }
+          } else if (guidRaw instanceof Dict) {
+            guidList.push({
+              x: +guidRaw.get("x") || 0,
+              y: +guidRaw.get("y") || 0,
+              page: parseInt(guidRaw.get("page") || 1, 10),
+              color: guidRaw.has("color") ? guidRaw.get("color") : null,
+            });
+          }
+
+          this.data.VDSPDFAnnotations.push({
+            Guid: guidList,
+            DocumentationId: parseInt(item.get("DocumentationId") || 0, 10),
+            DocumentationPositionId: parseInt(item.get("DocumentationPositionId") || 0, 10),
+            SchemaId: parseInt(item.get("SchemaId") || 0, 10),
+          });
+        }
+      }
+
       if (this._isOffscreenCanvasSupported) {
         const strokeAlpha = params.dict.get("CA");
         const fakeUnicodeFont = new FakeUnicodeFont(xref, "sans-serif");
@@ -3930,7 +3980,7 @@ class FreeTextAnnotation extends MarkupAnnotation {
   }
 
   static createNewDict(annotation, xref, { apRef, ap }) {
-    const { color, fontSize, oldAnnotation, rect, rotation, user, value } =
+    const { color, fontSize, oldAnnotation, rect, rotation, user, value, VDSPDFAnnotations } =
       annotation;
     const freetext = oldAnnotation || new Dict(xref);
     freetext.set("Type", Name.get("Annot"));
@@ -3950,6 +4000,50 @@ class FreeTextAnnotation extends MarkupAnnotation {
     freetext.set("F", 4);
     freetext.set("Border", [0, 0, 0]);
     freetext.set("Rotate", rotation);
+
+
+    if (Array.isArray(VDSPDFAnnotations) && VDSPDFAnnotations.length) {
+      const vdsArray = [];
+
+      for (const item of VDSPDFAnnotations) {
+        const itemDict = new Dict(xref);
+
+        // Guid may come as "Guid" (Array) or "guid" (single object)
+        const guidList =
+          Array.isArray(item?.Guid) ? item.Guid :
+            (item?.guid ? [item.guid] : []);
+
+        const guidArray = [];
+        for (const g of guidList) {
+          if (!g) continue;
+          const gDict = new Dict(xref);
+
+          if (g.x !== undefined) gDict.set("x", +g.x);
+          if (g.y !== undefined) gDict.set("y", +g.y);
+          if (g.page !== undefined) gDict.set("page", parseInt(g.page, 10) || 1);
+          if (g.color) gDict.set("color", getPdfColorArray(color));
+
+          guidArray.push(gDict);
+        }
+        if (guidArray.length) {
+          itemDict.set("Guid", guidArray);
+        }
+
+        if (item.documentationId !== undefined) {
+          itemDict.set("DocumentationId", parseInt(item.documentationId, 10));
+        }
+        if (item.documentationPositionId !== undefined) {
+          itemDict.set("DocumentationPositionId", parseInt(item.documentationPositionId, 10));
+        }
+        if (item.schemaId !== undefined) {
+          itemDict.set("SchemaId", parseInt(item.schemaId, 10));
+        }
+
+        vdsArray.push(itemDict);
+      }
+
+      freetext.set("VDSPDFAnnotations", vdsArray);
+    }
 
     if (user) {
       freetext.set("T", stringToAsciiOrUTF16BE(user));
@@ -4382,6 +4476,47 @@ class InkAnnotation extends MarkupAnnotation {
     this.data.noHTML = false;
     this.data.opacity = dict.get("CA") || 1;
 
+    // ✅ Resolve /VDSPDFAnnotations from PDF dict
+    this.data.VDSPDFAnnotations = [];
+    const vdsArr = dict.get("VDSPDFAnnotations");
+    if (Array.isArray(vdsArr)) {
+      for (const itemRef of vdsArr) {
+        const item = xref.fetchIfRef(itemRef);
+        if (!(item instanceof Dict)) continue;
+
+        // Parse Guid(s)
+        const guidRaw = item.get("Guid");
+        const guidList = [];
+
+        if (Array.isArray(guidRaw)) {
+          for (const gRef of guidRaw) {
+            const g = xref.fetchIfRef(gRef);
+            if (!(g instanceof Dict)) continue;
+            guidList.push({
+              x: +g.get("x") || 0,
+              y: +g.get("y") || 0,
+              page: parseInt(g.get("page") || 1, 10),
+              color: g.has("color") ? g.get("color") : null,
+            });
+          }
+        } else if (guidRaw instanceof Dict) {
+          guidList.push({
+            x: +guidRaw.get("x") || 0,
+            y: +guidRaw.get("y") || 0,
+            page: parseInt(guidRaw.get("page") || 1, 10),
+            color: guidRaw.has("color") ? guidRaw.get("color") : null,
+          });
+        }
+
+        this.data.VDSPDFAnnotations.push({
+          Guid: guidList,
+          DocumentationId: parseInt(item.get("DocumentationId") || 0, 10),
+          DocumentationPositionId: parseInt(item.get("DocumentationPositionId") || 0, 10),
+          SchemaId: parseInt(item.get("SchemaId") || 0, 10),
+        });
+      }
+    }
+
     const rawInkLists = dict.getArray("InkList");
     if (!Array.isArray(rawInkLists)) {
       return;
@@ -4467,6 +4602,7 @@ class InkAnnotation extends MarkupAnnotation {
       rotation,
       thickness,
       user,
+      VDSPDFAnnotations
     } = annotation;
     const ink = oldAnnotation || new Dict(xref);
     ink.set("Type", Name.get("Annot"));
@@ -4507,6 +4643,49 @@ class InkAnnotation extends MarkupAnnotation {
       n.set("N", apRef);
     } else {
       n.set("N", ap);
+    }
+
+    if (Array.isArray(VDSPDFAnnotations) && VDSPDFAnnotations.length) {
+      const vdsArray = [];
+
+      for (const item of VDSPDFAnnotations) {
+        const itemDict = new Dict(xref);
+
+        // Guid may come as "Guid" (Array) or "guid" (single object)
+        const guidList =
+          Array.isArray(item?.Guid) ? item.Guid :
+            (item?.guid ? [item.guid] : []);
+
+        const guidArray = [];
+        for (const g of guidList) {
+          if (!g) continue;
+          const gDict = new Dict(xref);
+
+          if (g.x !== undefined) gDict.set("x", +g.x);
+          if (g.y !== undefined) gDict.set("y", +g.y);
+          if (g.page !== undefined) gDict.set("page", parseInt(g.page, 10) || 1);
+          if (g.color) gDict.set("color", getPdfColorArray(color));
+
+          guidArray.push(gDict);
+        }
+        if (guidArray.length) {
+          itemDict.set("Guid", guidArray);
+        }
+
+        if (item.documentationId !== undefined) {
+          itemDict.set("DocumentationId", parseInt(item.documentationId, 10));
+        }
+        if (item.documentationPositionId !== undefined) {
+          itemDict.set("DocumentationPositionId", parseInt(item.documentationPositionId, 10));
+        }
+        if (item.schemaId !== undefined) {
+          itemDict.set("SchemaId", parseInt(item.schemaId, 10));
+        }
+
+        vdsArray.push(itemDict);
+      }
+
+      ink.set("VDSPDFAnnotations", vdsArray);
     }
 
     return ink;
@@ -4648,32 +4827,50 @@ class HighlightAnnotation extends MarkupAnnotation {
 
     const { dict, xref } = params;
 
-    try {
-      if (this.contents && typeof this.contents === "string") {
-        const parsed = JSON.parse(this.contents);
-        if (parsed?.VDSPDFAnnotations) {
-          this.data.VDSPDFAnnotations = parsed.VDSPDFAnnotations;
-        }
-      }
-    } catch (e) {
-      console.warn("VDSPDFAnnotations parse failed:", e);
-    }
-
     this.data.annotationType = AnnotationType.HIGHLIGHT;
 
-    // ⬇️ Resolve /VDSPDFAnnotations properly
-    const vdspdfArray = new ArrayObject();
-    vdspdfArray.push(
-      Dict.merge(xref, {
-        Guid: String("guid-1"),
-        DocumentationId: String("doc-001"),
-        DocumentationPositionId: String("pos-001"),
-      })
-    );
-    highlight.set("VDSPDFAnnotations", vdspdfArray);
+    // Resolve VDSPDFAnnotations from PDF dict
+    this.data.VDSPDFAnnotations = [];
+    const vdsArr = dict.get("VDSPDFAnnotations");
+    if (Array.isArray(vdsArr)) {
+      for (const itemRef of vdsArr) {
+        const item = xref.fetchIfRef(itemRef);
+        if (!(item instanceof Dict)) continue;
+
+        // Parse Guid(s)
+        const guidRaw = item.get("Guid");
+        const guidList = [];
+
+        if (Array.isArray(guidRaw)) {
+          for (const gRef of guidRaw) {
+            const g = xref.fetchIfRef(gRef);
+            if (!(g instanceof Dict)) continue;
+            guidList.push({
+              x: +g.get("x") || 0,
+              y: +g.get("y") || 0,
+              page: parseInt(g.get("page") || 1, 10),
+              color: g.has("color") ? g.get("color") : null,
+            });
+          }
+        } else if (guidRaw instanceof Dict) {
+          guidList.push({
+            x: +guidRaw.get("x") || 0,
+            y: +guidRaw.get("y") || 0,
+            page: parseInt(guidRaw.get("page") || 1, 10),
+            color: guidRaw.has("color") ? guidRaw.get("color") : null,
+          });
+        }
+
+        this.data.VDSPDFAnnotations.push({
+          Guid: guidList,
+          DocumentationId: parseInt(item.get("DocumentationId") || 0, 10),
+          DocumentationPositionId: parseInt(item.get("DocumentationPositionId") || 0, 10),
+          SchemaId: parseInt(item.get("SchemaId") || 0, 10),
+        });
+      }
+    }
 
     this.data.isEditable = !this.data.noHTML;
-    // We want to be able to add mouse listeners to the annotation.
     this.data.noHTML = false;
     this.data.opacity = dict.get("CA") || 1;
 
@@ -4683,13 +4880,8 @@ class HighlightAnnotation extends MarkupAnnotation {
 
       if (!this.appearance || !resources?.has("ExtGState")) {
         if (this.appearance) {
-          // Workaround for cases where there's no /ExtGState-entry directly
-          // available, e.g. when the appearance stream contains a /XObject of
-          // the /Form-type, since that causes the highlighting to completely
-          // obscure the PDF content below it (fixes issue13242.pdf).
           warn("HighlightAnnotation - ignoring built-in appearance stream.");
         }
-        // Default color is yellow in Acrobat Reader
         const fillColor = this.color ? getPdfColorArray(this.color) : [1, 1, 0];
         const fillAlpha = dict.get("CA");
 
@@ -4715,8 +4907,67 @@ class HighlightAnnotation extends MarkupAnnotation {
     }
   }
 
+  normalizeVDSAnnotations(vdsData) {
+    if (!vdsData || typeof vdsData !== 'object') return {};
+
+    const normalized = { ...vdsData };
+
+    // Ensure these fields are integers
+    if (normalized.documentationId !== undefined) {
+      normalized.documentationId = parseInt(normalized.documentationId, 10) || 0;
+    }
+    if (normalized.documentationPositionId !== undefined) {
+      normalized.documentationPositionId = parseInt(normalized.documentationPositionId, 10) || 0;
+    }
+    if (normalized.schemaId !== undefined) {
+      normalized.schemaId = parseInt(normalized.schemaId, 10) || 0;
+    }
+
+    return normalized;
+  }
+
+  parseVDSPDFAnnotations(vdsData) {
+    if (!vdsData) return {};
+
+    // If it's a Dict, convert to plain object
+    if (typeof vdsData.getKeys === 'function') {
+      return this.normalizeVDSAnnotations(this.convertPDFDictToObject(vdsData));
+    }
+
+    // If it's already an object, normalize and return
+    if (typeof vdsData === 'object') {
+      return this.normalizeVDSAnnotations(vdsData);
+    }
+
+    return {};
+  }
+
+  convertPDFDictToObject(dict) {
+    if (!dict || typeof dict.getKeys !== 'function') {
+      return {};
+    }
+
+    const result = {};
+    const keys = dict.getKeys();
+
+    for (const key of keys) {
+      const value = dict.get(key);
+
+      if (value && typeof value.getKeys === 'function') {
+        // Nested dictionary
+        result[key] = this.convertPDFDictToObject(value);
+      } else if (Array.isArray(value)) {
+        result[key] = value;
+      } else {
+        result[key] = value;
+      }
+    }
+
+    return result;
+  }
+
   static createNewDict(annotation, xref, { apRef, ap }) {
-    const { color, oldAnnotation, opacity, rect, rotation, user, quadPoints } =
+    const { color, oldAnnotation, opacity, rect, rotation, user, quadPoints, VDSPDFAnnotations } =
       annotation;
     const highlight = oldAnnotation || new Dict(xref);
     highlight.set("Type", Name.get("Annot"));
@@ -4737,6 +4988,49 @@ class HighlightAnnotation extends MarkupAnnotation {
 
     // Opacity.
     highlight.set("CA", opacity);
+
+    if (Array.isArray(VDSPDFAnnotations) && VDSPDFAnnotations.length) {
+      const vdsArray = [];
+
+      for (const item of VDSPDFAnnotations) {
+        const itemDict = new Dict(xref);
+
+        // Guid may come as "Guid" (Array) or "guid" (single object)
+        const guidList =
+          Array.isArray(item?.Guid) ? item.Guid :
+            (item?.guid ? [item.guid] : []);
+
+        const guidArray = [];
+        for (const g of guidList) {
+          if (!g) continue;
+          const gDict = new Dict(xref);
+
+          if (g.x !== undefined) gDict.set("x", +g.x);
+          if (g.y !== undefined) gDict.set("y", +g.y);
+          if (g.page !== undefined) gDict.set("page", parseInt(g.page, 10) || 1);
+          if (g.color) gDict.set("color", getPdfColorArray(color));
+
+          guidArray.push(gDict);
+        }
+        if (guidArray.length) {
+          itemDict.set("Guid", guidArray);
+        }
+
+        if (item.documentationId !== undefined) {
+          itemDict.set("DocumentationId", parseInt(item.documentationId, 10));
+        }
+        if (item.documentationPositionId !== undefined) {
+          itemDict.set("DocumentationPositionId", parseInt(item.documentationPositionId, 10));
+        }
+        if (item.schemaId !== undefined) {
+          itemDict.set("SchemaId", parseInt(item.schemaId, 10));
+        }
+
+        vdsArray.push(itemDict);
+      }
+
+      highlight.set("VDSPDFAnnotations", vdsArray);
+    }
 
     if (user) {
       highlight.set("T", stringToAsciiOrUTF16BE(user));
@@ -4809,7 +5103,6 @@ class UnderlineAnnotation extends MarkupAnnotation {
 
     const { dict, xref } = params;
 
-    // 👇 Extract VDSPDFAnnotations array (custom key)
     const vdspdfAnnots = dict.get("VDSPDFAnnotations");
     this.data.VDSPDFAnnotations = [];
 

@@ -2497,6 +2497,26 @@ class FreeTextAnnotationElement extends AnnotationElement {
 
     this._editOnDoubleClick();
 
+    try {
+      const vds = (this.data.VDSPDFAnnotations && this.data.VDSPDFAnnotations[0]) || null;
+      if (vds && this.container) {
+        this.container.style.cursor = "pointer";
+        this.container.addEventListener("click", () => {
+
+          const payload = {
+            schemaId:  vds.SchemaId ?? vds.schemaId ?? null,
+            documentationId: vds.DocumentationId ?? vds.documentationId ?? null,
+            documentationPositionId: vds.DocumentationPositionId ?? vds.documentationPositionId ?? null,
+            guid: Array.isArray(vds.Guid) ? vds.Guid[0] : vds.Guid || null,
+            page: this.parent?.page?.pageNumber ?? null,
+          };
+          window.parent?.postMessage({ type: "open-doc-from-annotation", payload }, "*");
+        }, { passive: true });
+      }
+    } catch (e) {
+      console.warn("VDS click hook failed:", e);
+    }
+
     return this.container;
   }
 }
@@ -2860,6 +2880,26 @@ class InkAnnotationElement extends AnnotationElement {
     this.container.append(svg);
     this._editOnDoubleClick();
 
+    try {
+      const vds = (this.data.VDSPDFAnnotations && this.data.VDSPDFAnnotations[0]) || null;
+      if (vds && this.container) {
+        this.container.style.cursor = "pointer";
+        this.container.addEventListener("click", () => {
+
+          const payload = {
+            schemaId:  vds.SchemaId ?? vds.schemaId ?? null,
+            documentationId: vds.DocumentationId ?? vds.documentationId ?? null,
+            documentationPositionId: vds.DocumentationPositionId ?? vds.documentationPositionId ?? null,
+            guid: Array.isArray(vds.Guid) ? vds.Guid[0] : vds.Guid || null,
+            page: this.parent?.page?.pageNumber ?? null,
+          };
+          window.parent?.postMessage({ type: "open-doc-from-annotation", payload }, "*");
+        }, { passive: true });
+      }
+    } catch (e) {
+      console.warn("VDS click hook failed:", e);
+    }
+
     return this.container;
   }
 
@@ -2912,6 +2952,26 @@ class HighlightAnnotationElement extends AnnotationElement {
 
     this.container.classList.add("highlightAnnotation");
     this._editOnDoubleClick();
+
+    try {
+      const vds = (this.data.VDSPDFAnnotations && this.data.VDSPDFAnnotations[0]) || null;
+      if (vds && this.container) {
+        this.container.style.cursor = "pointer";
+        this.container.addEventListener("click", () => {
+
+          const payload = {
+            schemaId:  vds.SchemaId ?? vds.schemaId ?? null,
+            documentationId: vds.DocumentationId ?? vds.documentationId ?? null,
+            documentationPositionId: vds.DocumentationPositionId ?? vds.documentationPositionId ?? null,
+            guid: Array.isArray(vds.Guid) ? vds.Guid[0] : vds.Guid || null,
+            page: this.parent?.page?.pageNumber ?? null,
+          };
+          window.parent?.postMessage({ type: "open-doc-from-annotation", payload }, "*");
+        }, { passive: true });
+      }
+    } catch (e) {
+      console.warn("VDS click hook failed:", e);
+    }
 
     return this.container;
   }

@@ -534,6 +534,10 @@ class AnnotationEditorLayer {
       const div = editor.render();
       this.div.append(div);
       editor.isAttachedToDOM = true;
+
+      div.editor = editor;
+      div._editor = editor;
+      div.__editor = editor;
     }
 
     editor.fixAndSetPosition();
@@ -556,7 +560,9 @@ class AnnotationEditorLayer {
 
       let highlightedText = "",
         messageData = {};
-      let id = this.getNextId();
+      const domId = editor?.id;
+      const annotElemId = editor?.annotationElementId || null;
+
       if (this.#uiManager.getMode() === AnnotationEditorType.HIGHLIGHT) {
         highlightedText = editor.text || "[Drawn Highlight]";
 
@@ -564,19 +570,58 @@ class AnnotationEditorLayer {
           type: 'PDFJS_ANNOTATION_ADDED',
           detail: {
             annotationType: this.#uiManager.getMode(),
+            id: domId,
+            annotationElementId: annotElemId,
             text: highlightedText,
             page: this.pageIndex + 1,
             x: coords.x,
             y: coords.y,
             width: coords.width,
             height: coords.height,
-            id: id,
             color: editor.color || null,
             guid: {
               x: coords.x,
               y: coords.y,
               color: editor.color || null,
             },
+            quadPoints: this.#computeQuadPointsFromCoords(coords),
+            vdsData: {
+              ready: true,
+              coordinates: coords,
+              pageIndex: this.pageIndex,
+              annotationId: domId
+            }
+          }
+        };
+        window.parent?.postMessage(messageData, '*');
+      } else if (this.#uiManager.getMode() === AnnotationEditorType.INK) {
+        highlightedText = "[Drawn Ink]";
+
+        messageData = {
+          type: 'PDFJS_ANNOTATION_ADDED',
+          detail: {
+            annotationType: this.#uiManager.getMode(),
+            id: domId,
+            annotationElementId: annotElemId,
+            text: highlightedText,
+            page: this.pageIndex + 1,
+            x: coords.x,
+            y: coords.y,
+            width: coords.width,
+            height: coords.height,
+            color: editor.color || null,
+            guid: {
+              x: coords.x,
+              y: coords.y,
+              color: editor.color || null,
+            },
+            quadPoints: this.#computeQuadPointsFromCoords(coords),
+            vdsData: {
+              ready: true,
+              coordinates: coords,
+              pageIndex: this.pageIndex,
+              annotationId: domId
+            }
           }
         };
         window.parent?.postMessage(messageData, '*');
@@ -588,19 +633,27 @@ class AnnotationEditorLayer {
             type: 'PDFJS_ANNOTATION_ADDED',
             detail: {
               annotationType: this.#uiManager.getMode(),
+              id: domId,
+              annotationElementId: annotElemId,
               text: highlightedText,
               page: this.pageIndex + 1,
               x: coords.x,
               y: coords.y,
               width: coords.width,
               height: coords.height,
-              id: id,
-              color: editor.color || window.getComputedStyle(div).color || null,
+              color: editor.color || null,
               guid: {
                 x: coords.x,
                 y: coords.y,
-                color: editor.color || window.getComputedStyle(div).color || null
+                color: editor.color || null,
               },
+              quadPoints: this.#computeQuadPointsFromCoords(coords),
+              vdsData: {
+                ready: true,
+                coordinates: coords,
+                pageIndex: this.pageIndex,
+                annotationId: domId
+              }
             }
           };
           window.parent?.postMessage(messageData, '*');
@@ -609,6 +662,69 @@ class AnnotationEditorLayer {
     }
   }
 
+  #computeQuadPointsFromCoords(coords) {
+    const { x, y, width, height } = coords;
+    // Return quadPoints in the format expected by PDF.js
+    return [
+      x, y + height,           // bottom-left
+      x + width, y + height,   // bottom-right
+      x, y,                    // top-left
+      x + width, y             // top-right
+    ];
+  }
+
+  #createVDSAnnotation(editor, coords, vdsAnnotations) {
+    const app = window.PDFViewerApplication;
+    if (!app || !app.addHighlightWithVDSPDFAnnotation) {
+      console.warn('PDFViewerApplication not available for VDS annotation creation');
+      return;
+    }
+
+    const quadPoints = this.#computeQuadPointsFromCoords(coords);
+
+    // Extract VDS data
+    const vdsData = Array.isArray(vdsAnnotations) ? vdsAnnotations[0] : vdsAnnotations;
+
+    const vdsParams = {
+      page: this.pageIndex + 1,
+      quadPoints: quadPoints,
+      color: editor.color || '#FF0000',
+      guid: {
+        x: coords.x,
+        y: coords.y,
+        color: editor.color || '#FF0000',
+        page: this.pageIndex + 1,
+        timestamp: Date.now()
+      },
+      documentationId: vdsData.documentationId?.toString() || '0',
+      documentationPositionId: parseInt(vdsData.documentationPositionId, 10) || 0,
+      schemaId: vdsData.schemaId?.toString() || '0'
+    };
+
+    console.log('Creating VDS annotation with params:', vdsParams);
+
+    this.createAndAddNewEditor(
+      { offsetX: coords.x, offsetY: this.viewport.height - coords.y }, // fake event with needed fields
+      false,
+      {
+        annotationType: AnnotationEditorType.HIGHLIGHT,
+        color: editor.color || '#FF0000',
+        quadPoints: quadPoints,
+        VDSPDFAnnotations: [{
+          documentationId: vdsData.documentationId?.toString() || '0',
+          documentationPositionId: parseInt(vdsData.documentationPositionId, 10) || 0,
+          schemaId: vdsData.schemaId?.toString() || '0',
+          guid: {
+            x: coords.x,
+            y: coords.y,
+            color: editor.color || '#FF0000',
+            page: this.pageIndex + 1,
+            timestamp: Date.now()
+          }
+        }]
+      }
+    );
+  }
 
   moveEditorInDOM(editor) {
     if (!editor.isAttachedToDOM) {
