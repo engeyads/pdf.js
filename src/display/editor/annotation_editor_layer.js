@@ -157,7 +157,52 @@ class AnnotationEditorLayer {
     this.#textLayer = textLayer;
     this.drawLayer = drawLayer;
     this._structTree = structTreeLayer;
+    if (this.div && !this.div.dataset.vdsDelegatedClick) {
+      this.div.dataset.vdsDelegatedClick = "1";
 
+      this.div.addEventListener(
+        "click",
+        (e) => {
+          const el =
+            e.target.closest(
+              '.highlightEditor, .freeTextEditor, .inkEditor, [data-vds-schema-id]'
+            ) || e.target.closest("[data-vdsSchemaId]");
+
+          if (!el) return;
+
+          // resolve editor instance (pdf.js attaches it on the node; you already set div.editor earlier)
+          const editor = el.editor || el._editor || el.__editor || null;
+          const vds = editor?.VDSPDFAnnotations?.[0];
+
+          if (!vds) return;
+
+          const schemaId = vds.SchemaId ?? vds.schemaId;
+          const documentationId = vds.DocumentationId ?? vds.documentationId;
+          const documentationPositionId =
+            vds.DocumentationPositionId ?? vds.documentationPositionId;
+
+          if (schemaId == null || documentationId == null) return;
+
+          e.stopPropagation();
+
+          // mirror the message your main.js already handles
+          window.parent?.postMessage(
+            {
+              type: "open-doc-from-annotation",
+              payload: {
+                schemaId,
+                documentationId,
+                documentationPositionId,
+                guid: Array.isArray(vds.Guid) ? vds.Guid[0] : vds.Guid || null,
+                page: ((editor?.pageIndex ?? 0) + 1),
+              },
+            },
+            "*"
+          );
+        },
+        { passive: true }
+      );
+    }
     this.#uiManager.addLayer(this);
   }
 
@@ -547,7 +592,8 @@ class AnnotationEditorLayer {
 
     if (
       this.#uiManager.getMode() === AnnotationEditorType.HIGHLIGHT ||
-      this.#uiManager.getMode() === AnnotationEditorType.FREETEXT
+      this.#uiManager.getMode() === AnnotationEditorType.FREETEXT ||
+      this.#uiManager.getMode() === AnnotationEditorType.INK
     ) {
       const pageElement = this.div.closest('.page');
       if (!pageElement) {
@@ -701,7 +747,6 @@ class AnnotationEditorLayer {
       schemaId: vdsData.schemaId?.toString() || '0'
     };
 
-    console.log('Creating VDS annotation with params:', vdsParams);
 
     this.createAndAddNewEditor(
       { offsetX: coords.x, offsetY: this.viewport.height - coords.y }, // fake event with needed fields

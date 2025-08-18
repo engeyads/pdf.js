@@ -128,7 +128,6 @@ class MyPDFApp {
     const vdsAnnotations = this._customAnnotations
       .flatMap(ann => ann.VDSPDFAnnotations || []);
 
-    console.log("📝 VDSPDFAnnotations to embed:", vdsAnnotations);
     const data = await this.pdfDocument.saveDocument({
       annotationsData: vdsAnnotations
     });
@@ -1244,7 +1243,6 @@ const PDFViewerApplication = window.PDFViewerApplication = {
       const all = this._customAnnotations.flatMap(
         ann => ann.VDSPDFAnnotations || []
       );
-      console.log("VDSPDFAnnotations to embed:", all);
       const data = await this.pdfDocument.saveDocument({ annotationsData: all });
       this.downloadManager.download(data, this._downloadUrl, this._docFilename);
     } catch (reason) {
@@ -1279,7 +1277,6 @@ const PDFViewerApplication = window.PDFViewerApplication = {
       const all = this._customAnnotations.flatMap(
         ann => ann.VDSPDFAnnotations || []
       );
-      console.log("VDSPDFAnnotations to embed:", all);
       const data = await this.pdfDocument.saveDocument({ annotationsData: all });
       // this.downloadManager.download(data, this._downloadUrl, this._docFilename);
       const blob = new Blob([new Uint8Array(data)], {type: 'application/pdf'});
@@ -1290,7 +1287,6 @@ const PDFViewerApplication = window.PDFViewerApplication = {
         payload: blob
       }, '*');
 
-      console.log('PDF successfully uploaded to server.');
     } catch (reason) {
       // When the PDF document isn't ready, fallback to a "regular" download.
       console.error(`Error when saving the document:`, reason);
@@ -1534,6 +1530,9 @@ const PDFViewerApplication = window.PDFViewerApplication = {
 
       editor._uiManager?.addToAnnotationStorage?.(editor);
       editor.commit?.();
+
+      attachVDSClickToEditor(editor);
+
       return true;
     } catch (e) {
       console.error('updateLastHighlightAnnotation failed:', e);
@@ -1601,8 +1600,6 @@ const PDFViewerApplication = window.PDFViewerApplication = {
         }]
       };
 
-      console.log(params);
-
       const editor = await layer.deserialize({
         annotationEditorType: AnnotationEditorType.HIGHLIGHT,
         pageIndex,
@@ -1650,8 +1647,6 @@ const PDFViewerApplication = window.PDFViewerApplication = {
         ann => ann.VDSPDFAnnotations || []
       );
 
-      console.log("📝 VDS annotations to embed in PDF:", vdsAnnotations);
-
       // Validate VDS annotations before saving
       const validVdsAnnotations = vdsAnnotations.filter(vds => {
         const isValid = vds.DocumentationId && vds.SchemaId;
@@ -1682,8 +1677,6 @@ const PDFViewerApplication = window.PDFViewerApplication = {
           vdsAnnotationCount: validVdsAnnotations.length
         }
       }, '*');
-
-      console.log(`✅ PDF saved with ${validVdsAnnotations.length} VDS annotations`);
 
     } catch (e) {
       console.error("Error saving PDF with VDS annotations:", e);
@@ -2678,138 +2671,6 @@ const PDFViewerApplication = window.PDFViewerApplication = {
 
 initCom(PDFViewerApplication);
 
-
-// (function detectExistingVDSAnnotations() {
-//   const eventBus = window.PDFViewerApplication?.eventBus;
-//   if (!eventBus) {
-//     console.warn('EventBus not ready for VDS detection, retrying...');
-//     setTimeout(detectExistingVDSAnnotations, 100);
-//     return;
-//   }
-//
-//   eventBus.on('documentloaded', async () => {
-//     try {
-//       const pdf = PDFViewerApplication.pdfDocument;
-//       if (!pdf) return;
-//
-//       const numPages = pdf.numPages;
-//       let vdsAnnotationsFound = 0;
-//
-//       console.log('🔍 Scanning for existing VDS annotations...');
-//
-//       for (let pageNum = 1; pageNum <= numPages; pageNum++) {
-//         const page = await pdf.getPage(pageNum);
-//         const annotations = await page.getAnnotations();
-//
-//         for (const annot of annotations) {
-//           // Check for VDS annotations in highlight annotations
-//           if (annot.subtype === 'Highlight') {
-//             let vdsData = null;
-//
-//             // Method 1: Check contents field
-//             if (annot.contents) {
-//               try {
-//                 const parsed = JSON.parse(annot.contents);
-//                 if (parsed.VDSPDFAnnotations && Array.isArray(parsed.VDSPDFAnnotations)) {
-//                   vdsData = parsed.VDSPDFAnnotations[0];
-//                 }
-//               } catch (e) {
-//                 // Not JSON, continue
-//               }
-//             }
-//
-//             // Method 2: Check direct VDSPDFAnnotations field
-//             if (!vdsData && annot.VDSPDFAnnotations) {
-//               vdsData = Array.isArray(annot.VDSPDFAnnotations)
-//                 ? annot.VDSPDFAnnotations[0]
-//                 : annot.VDSPDFAnnotations;
-//             }
-//
-//             // Method 3: Check raw dictionary data
-//             if (!vdsData && annot.dict) {
-//               const vdsField = annot.dict.get('VDSPDFAnnotations');
-//               if (vdsField) {
-//                 vdsData = vdsField;
-//               }
-//             }
-//
-//             if (vdsData && vdsData.DocumentationId && vdsData.SchemaId) {
-//               vdsAnnotationsFound++;
-//
-//               console.log('📋 Found VDS annotation:', {
-//                 page: pageNum,
-//                 documentationId: vdsData.DocumentationId,
-//                 schemaId: vdsData.SchemaId,
-//                 positionId: vdsData.DocumentationPositionId
-//               });
-//
-//               // Notify parent window
-//               window.parent?.postMessage({
-//                 type: 'vds-annotation-detected',
-//                 payload: {
-//                   vdsPDFAnnotations: {
-//                     documentationId: vdsData.DocumentationId,
-//                     documentationPositionId: vdsData.DocumentationPositionId,
-//                     schemaId: vdsData.SchemaId
-//                   },
-//                   page: pageNum
-//                 }
-//               }, '*');
-//
-//               // Stop after finding the first VDS annotation
-//               return;
-//             }
-//           }
-//
-//           // Also check FreeText annotations for legacy format
-//           if (annot.subtype === 'FreeText') {
-//             const textContent = annot.contents?.trim() || annot.contentsObj?.str?.trim() || '';
-//
-//             if (textContent.includes('{documentationId:')) {
-//               const match = textContent.match(
-//                 /documentationId\s*:\s*"?(\d+)"?.*?anfnr\s*:\s*"?(\d+)"?.*?schmId\s*:\s*"?(\d+)"?/
-//               );
-//
-//               if (match && match[1]) {
-//                 const documentationId = match[1];
-//                 const anfnr = match[2];
-//                 const schmId = match[3];
-//
-//                 console.log('📋 Found legacy annotation format:', {
-//                   documentationId,
-//                   anfnr,
-//                   schmId
-//                 });
-//
-//                 window.parent?.postMessage({
-//                   type: 'custom-annotation-detected',
-//                   payload: { documentationId, anfnr, schmId }
-//                 }, '*');
-//                 return;
-//               }
-//             }
-//           }
-//         }
-//       }
-//
-//       if (vdsAnnotationsFound === 0) {
-//         console.log('ℹ️ No VDS annotations found in document');
-//         window.parent?.postMessage({
-//           type: 'custom-annotation-not-found'
-//         }, '*');
-//       } else {
-//         console.log(`✅ Found ${vdsAnnotationsFound} VDS annotations in document`);
-//       }
-//
-//     } catch (e) {
-//       console.error('Error scanning for VDS annotations:', e);
-//       window.parent?.postMessage({
-//         type: 'custom-annotation-not-found'
-//       }, '*');
-//     }
-//   });
-// })();
-
 (function listenForLoadedDocument() {
   const eventBus = window.PDFViewerApplication?.eventBus;
   if (!eventBus) {
@@ -2828,8 +2689,6 @@ initCom(PDFViewerApplication);
         const annotations = await page.getAnnotations();
 
         for (const annot of annotations) {
-          console.log('[ANNOTATION RAW]', annot);
-
           const textContent = annot.contents?.trim() || annot.contentsObj?.str?.trim() || '';
 
           if (
@@ -3305,6 +3164,157 @@ function closeEditorUndoBar(evt) {
   }
   if (this.appConfig.secondaryToolbar?.toolbar.contains(evt.target)) {
     this.editorUndoBar.hide();
+  }
+}
+
+(function installVDSClickThrough() {
+  const onReady = () => {
+    const container =
+      PDFViewerApplication?.pdfViewer?.viewer ||
+      document.getElementById("viewer") ||
+      document;
+
+    if (!container || container.dataset.vdsClickThrough === "1") return;
+    container.dataset.vdsClickThrough = "1";
+
+    // --- shared hit-test used by click and cursor update ---
+    function hitTestDisabledEditor(e) {
+      const page = e.target.closest(".page");
+      if (!page) return null;
+
+      const editorLayer = page.querySelector(".annotationEditorLayer");
+      if (!editorLayer) return null;
+
+      const candidates = editorLayer.querySelectorAll(
+        '[data-vds-clickable="1"], [data-vdsSchemaId], [data-vds-schema-id]'
+      );
+      if (!candidates.length) return null;
+
+      const x = e.clientX, y = e.clientY;
+      for (const el of candidates) {
+        const r = el.getBoundingClientRect();
+        if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
+          return el;
+        }
+      }
+      return null;
+    }
+
+    // ----- CLICK handler (you already had this) -----
+    container.addEventListener("click", (e) => {
+      // direct hit on annotationLayer (already tagged)
+      const direct = e.target.closest(
+        "[data-vdsDocId],[data-vdsDocumentationId]"
+      );
+      if (direct) {
+        const schemaId =
+          direct.dataset.vdsSchemaId || direct.dataset.vdsSchemaid;
+        const documentationId =
+          direct.dataset.vdsDocumentationId || direct.dataset.vdsDocId;
+        const documentationPositionId =
+          direct.dataset.vdsDocumentationPositionId || direct.dataset.vdsPosId || "";
+        if (schemaId && documentationId) {
+          e.stopPropagation();
+          window.parent?.postMessage(
+            {
+              type: "open-doc-from-annotation",
+              payload: { schemaId, documentationId, documentationPositionId },
+            },
+            "*"
+          );
+        }
+        return;
+      }
+
+      // hit-test editors when editor layer is disabled
+      const el = hitTestDisabledEditor(e);
+      if (!el) return;
+
+      const schemaId = el.dataset.vdsSchemaId || el.dataset.vdsSchemaid;
+      const documentationId =
+        el.dataset.vdsDocumentationId || el.dataset.vdsDocId;
+      const documentationPositionId =
+        el.dataset.vdsDocumentationPositionId || el.dataset.vdsPosId || "";
+      if (schemaId && documentationId) {
+        e.stopPropagation();
+        window.parent?.postMessage(
+          {
+            type: "open-doc-from-annotation",
+            payload: { schemaId, documentationId, documentationPositionId },
+          },
+          "*"
+        );
+      }
+    }, { passive: true });
+
+    // ----- MOUSEMOVE handler: set cursor on the container -----
+    let raf = 0;
+    container.addEventListener("mousemove", (e) => {
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+
+        // if we're directly over a tagged annotation in the annotationLayer, let its CSS handle cursor
+        if (e.target.closest("[data-vdsDocId],[data-vdsDocumentationId]")) {
+          container.style.cursor = ""; // keep default; your CSS already shows pointer
+          return;
+        }
+
+        // otherwise, check disabled editor layer
+        const el = hitTestDisabledEditor(e);
+        container.style.cursor = el ? "pointer" : "";
+      });
+    }, { passive: true });
+  };
+
+  const eb = window.PDFViewerApplication?.eventBus;
+  if (eb?.on) eb.on("pagesinit", onReady);
+  else if (document.readyState === "loading")
+    document.addEventListener("DOMContentLoaded", onReady, { once: true });
+  else onReady();
+})();
+
+function attachVDSClickToEditor(editor) {
+  try {
+    if (!editor || !Array.isArray(editor.VDSPDFAnnotations) || !editor.VDSPDFAnnotations.length) return;
+
+    const vds = editor.VDSPDFAnnotations[0];
+    const schemaId = vds.SchemaId ?? vds.schemaId;
+    const documentationId = vds.DocumentationId ?? vds.documentationId;
+    const documentationPositionId = vds.DocumentationPositionId ?? vds.documentationPositionId;
+
+    const el = editor.editorDiv || editor.div || null;
+    if (!el || schemaId == null || documentationId == null) return;
+
+    if (el.style.pointerEvents === "none") el.style.pointerEvents = "";
+
+    if (el.dataset.vdsClickable === "1") return;
+
+    el.style.cursor = "pointer";
+    el.dataset.vdsClickable = "1";
+    el.dataset.vdsSchemaId = String(schemaId);
+    el.dataset.vdsDocumentationId = String(documentationId);
+    if (documentationPositionId != null) {
+      el.dataset.vdsDocumentationPositionId = String(documentationPositionId);
+    }
+
+    el.addEventListener("click", (ev) => {
+      if (editor.annotationType === 2 && el.isContentEditable) return;
+
+      ev.stopPropagation();
+      window.parent?.postMessage({
+        type: "open-doc-from-annotation",
+        payload: {
+          schemaId,
+          documentationId,
+          documentationPositionId,
+          guid: Array.isArray(vds.Guid) ? vds.Guid[0] : vds.Guid || null,
+          page: (editor.pageIndex ?? 0) + 1,
+        },
+      }, "*");
+    }, { passive: true });
+  } catch (e) {
+    console.warn("attachVDSClickToEditor failed:", e);
   }
 }
 

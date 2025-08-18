@@ -3914,7 +3914,7 @@ class FreeTextAnnotation extends MarkupAnnotation {
         this.data.textPosition = this._transformPoint(coords, bbox, matrix);
       }
 
-      // ✅ Resolve /VDSPDFAnnotations from PDF dict
+      // Resolve VDSPDFAnnotations from PDF dict
       this.data.VDSPDFAnnotations = [];
       const vdsArr = dict.get("VDSPDFAnnotations");
       if (Array.isArray(vdsArr)) {
@@ -4476,7 +4476,7 @@ class InkAnnotation extends MarkupAnnotation {
     this.data.noHTML = false;
     this.data.opacity = dict.get("CA") || 1;
 
-    // ✅ Resolve /VDSPDFAnnotations from PDF dict
+    // Resolve VDSPDFAnnotations from PDF dict
     this.data.VDSPDFAnnotations = [];
     const vdsArr = dict.get("VDSPDFAnnotations");
     if (Array.isArray(vdsArr)) {

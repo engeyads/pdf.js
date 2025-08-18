@@ -3212,7 +3212,7 @@ class AnnotationLayer {
         contentElement.setAttribute(key, value);
       }
     }
-
+    vdsTagElement(contentElement, element.annotationElement?.data);
     this.div.append(element);
     this.#accessibilityManager?.moveElementInDOM(
       this.div,
@@ -3287,6 +3287,8 @@ class AnnotationLayer {
       if (data.hidden) {
         rendered.style.visibility = "hidden";
       }
+
+      vdsTagElement(rendered.firstChild || rendered, data);
       await this.#appendElement(rendered, data.id);
 
       if (element._isEditable) {
@@ -3410,6 +3412,31 @@ class AnnotationLayer {
     );
   }
 }
+
+function vdsTagElement(div, data) {
+  try {
+    const list = data?.VDSPDFAnnotations || [];
+    if (!Array.isArray(list) || !list.length) return;
+
+    const v = list[0] || {};
+    const schemaId = v.SchemaId ?? v.schemaId;
+    const documentationId = v.DocumentationId ?? v.documentationId;
+    const documentationPositionId =
+      v.DocumentationPositionId ?? v.documentationPositionId;
+
+    if (schemaId != null && documentationId != null) {
+
+      div.dataset.vdsSchemaId = String(schemaId);
+      div.dataset.vdsDocumentationId = String(documentationId);
+      if (documentationPositionId != null) {
+        div.dataset.vdsDocumentationPositionId = String(documentationPositionId);
+      }
+
+      div.style.cursor = "pointer";
+    }
+  } catch {}
+}
+
 
 export {
   AnnotationLayer,

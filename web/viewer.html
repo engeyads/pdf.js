@@ -336,9 +336,9 @@ See https://github.com/adobe-type-tools/cmap-resources
                 <div id="editorModeSeparator" class="verticalToolbarSeparator"></div>
 
                 <div class="toolbarHorizontalGroup hiddenMediumView">
-                  <button id="customSaveAnnotations" class="toolbarButton" type="button" tabindex="0" title="Save with Annotations">
-                    <span>Save+Annot</span>
-                  </button>
+<!--                  <button id="customSaveAnnotations" class="toolbarButton" type="button" tabindex="0" title="Save with Annotations">-->
+<!--                    <span>Save+Annot</span>-->
+<!--                  </button>-->
 
                   <button id="printButton" class="toolbarButton" type="button" tabindex="0" data-l10n-id="pdfjs-print-button">
                     <span data-l10n-id="pdfjs-print-button-label"></span>
@@ -368,9 +368,9 @@ See https://github.com/adobe-type-tools/cmap-resources
                           <span data-l10n-id="pdfjs-print-button-label"></span>
                         </button>
 
-                        <button id="saveWithAnnotation" class="toolbarButton labeled" type="button" tabindex="0">
-                          <span>Save with Annotations</span>
-                        </button>
+<!--                        <button id="saveWithAnnotation" class="toolbarButton labeled" type="button" tabindex="0">-->
+<!--                          <span>Save with Annotations</span>-->
+<!--                        </button>-->
 
                         <button id="secondaryDownload" class="toolbarButton labeled" type="button" tabindex="0" data-l10n-id="pdfjs-save-button">
                           <span data-l10n-id="pdfjs-save-button-label"></span>
@@ -633,9 +633,9 @@ See https://github.com/adobe-type-tools/cmap-resources
             <div id="newAltTextButtons" class="dialogButtonsGroup">
               <button id="newAltTextCancel" type="button" class="secondaryButton hidden" tabindex="0"><span data-l10n-id="pdfjs-editor-alt-text-cancel-button"></span></button>
               <button id="newAltTextNotNow" type="button" class="secondaryButton" tabindex="0"><span data-l10n-id="pdfjs-editor-new-alt-text-not-now-button"></span></button>
-              <button id="saveWithAnnotations" type="button" class="primaryButton" tabindex="0">
-                <span>Save with Annotations</span>
-              </button>
+<!--              <button id="saveWithAnnotations" type="button" class="primaryButton" tabindex="0">-->
+<!--                <span>Save with Annotations</span>-->
+<!--              </button>-->
               <button id="newAltTextSave" type="button" class="primaryButton" tabindex="0"><span data-l10n-id="pdfjs-editor-alt-text-save-button"></span></button>
             </div>
           </div>
@@ -924,7 +924,6 @@ See https://github.com/adobe-type-tools/cmap-resources
           editor.div.style.left = `${x}px`;
           editor.div.style.top = `${y}px`;
 
-          // ✅ Set .rect explicitly to match how PDF.js internally expects position
           editor.rect = pageView.viewport.convertToPdfRect([x, y, x + editor.width, y + editor.height]);
 
           pageView.annotationEditorLayer.add(editor);
@@ -962,8 +961,7 @@ See https://github.com/adobe-type-tools/cmap-resources
         if (event.data?.type === 'add-hidden-annotation') {
           const { page, content } = event.data.payload;
 
-          // You can use this to simulate hidden annotation
-          // You can use this to simulate hidden annotation
+          // simulate hidden annotation
           const annotationDiv = document.createElement('div');
           annotationDiv.className = 'hidden-pdf-annotation';
           annotationDiv.style = 'position: absolute; top: 0; left: 0; background: yellow;';
@@ -1029,35 +1027,35 @@ See https://github.com/adobe-type-tools/cmap-resources
 
       });
 
-      document.getElementById('customSaveAnnotations')?.addEventListener('click', async () => {
-        try {
-          if (window.PDFViewerApplication?.saveWithCustomAnnotations) {
-            console.log('💾 Saving PDF with VDS annotations...');
-            await PDFViewerApplication.saveWithCustomAnnotations();
-          } else {
-            console.error('❌ saveWithCustomAnnotations function is not available');
-            alert("VDS annotation save function is not available.");
-          }
-        } catch (error) {
-          console.error('❌ Error saving with VDS annotations:', error);
-          alert("Error saving PDF with annotations: " + error.message);
-        }
-      });
+      // document.getElementById('customSaveAnnotations')?.addEventListener('click', async () => {
+      //   try {
+      //     if (window.PDFViewerApplication?.saveWithCustomAnnotations) {
+      //       console.log('💾 Saving PDF with VDS annotations...');
+      //       await PDFViewerApplication.saveWithCustomAnnotations();
+      //     } else {
+      //       console.error('❌ saveWithCustomAnnotations function is not available');
+      //       alert("VDS annotation save function is not available.");
+      //     }
+      //   } catch (error) {
+      //     console.error('❌ Error saving with VDS annotations:', error);
+      //     alert("Error saving PDF with annotations: " + error.message);
+      //   }
+      // });
 
-      document.getElementById('saveWithAnnotations')?.addEventListener('click', async () => {
-        try {
-          if (window.PDFViewerApplication?.saveWithCustomAnnotations) {
-            console.log('💾 Saving PDF with VDS annotations...');
-            await PDFViewerApplication.saveWithCustomAnnotations();
-          } else {
-            console.error('❌ saveWithCustomAnnotations function is not available');
-            alert("VDS annotation save function is not available.");
-          }
-        } catch (error) {
-          console.error('❌ Error saving with VDS annotations:', error);
-          alert("Error saving PDF with annotations: " + error.message);
-        }
-      });
+      // document.getElementById('saveWithAnnotations')?.addEventListener('click', async () => {
+      //   try {
+      //     if (window.PDFViewerApplication?.saveWithCustomAnnotations) {
+      //       console.log('💾 Saving PDF with VDS annotations...');
+      //       await PDFViewerApplication.saveWithCustomAnnotations();
+      //     } else {
+      //       console.error('❌ saveWithCustomAnnotations function is not available');
+      //       alert("VDS annotation save function is not available.");
+      //     }
+      //   } catch (error) {
+      //     console.error('❌ Error saving with VDS annotations:', error);
+      //     alert("Error saving PDF with annotations: " + error.message);
+      //   }
+      // });
 
       document.addEventListener('mousedown', function (e) {
         const sel = window.getSelection();
